@@ -2,7 +2,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArchitectureDiagram, type ArchNode, type ArchEdge } from "./components/ArchitectureDiagram";
+import {
+  ArchitectureDiagram,
+  type ArchNode,
+  type ArchEdge,
+} from "./components/ArchitectureDiagram";
 import s from "./page.module.css";
 
 const API_URL = "http://localhost:1000";
@@ -62,37 +66,30 @@ interface Project {
 
 function Spinner({ size = 14 }: { size?: number }) {
   return (
-    <svg width={size} height={size} className="animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+    <svg
+      width={size}
+      height={size}
+      className="animate-spin"
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v8z"
+      />
     </svg>
   );
 }
 
-
-
-function IconDoc() {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
-      <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16H3.75A1.75 1.75 0 012 14.25V1.75z" />
-    </svg>
-  );
-}
-function IconDiagram() {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
-      <path d="M1 3a2 2 0 012-2h3a2 2 0 010 4H3a2 2 0 01-2-2zm9 0a2 2 0 012-2h1a2 2 0 010 4h-1a2 2 0 01-2-2zM1 9a2 2 0 012-2h1a2 2 0 010 4H3a2 2 0 01-2-2zm9 0a2 2 0 012-2h3a2 2 0 110 4h-3a2 2 0 01-2-2z" />
-    </svg>
-  );
-}
-
-function IconSearch() {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13">
-      <path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 01-.326 1.275.749.749 0 01-.734-.215l-3.04-3.04zM11.5 7a4.499 4.499 0 11-8.997 0A4.499 4.499 0 0111.5 7z" />
-    </svg>
-  );
-}
 function IconSend() {
   return (
     <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
@@ -107,11 +104,6 @@ function IconPlus() {
     </svg>
   );
 }
-
-const NAV_ITEMS: { label: string; icon: React.ReactNode }[] = [
-  { label: "Documents", icon: <IconDoc /> },
-  { label: "Diagrams", icon: <IconDiagram /> },
-];
 
 export default function Home() {
   const [idea, setIdea] = useState("");
@@ -130,6 +122,35 @@ export default function Home() {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [recentIds, setRecentIds] = useState<number[]>([]);
+  const [projectNames, setProjectNames] = useState<Record<number, string>>({});
+
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [copyDone, setCopyDone] = useState(false);
+  const shareRef = useRef<HTMLDivElement>(null);
+
+  function extractProjectName(markdown: string): string {
+    // Find name after "Project Name Suggestion" label — strips **, [], and descriptions
+    const afterLabel = markdown.match(
+      /project name suggestion[^\n]*\n+\s*(?:\*\*|\[)?([A-Za-z][A-Za-z0-9 ]+?)(?:\*\*|\]|[\s\n]|$)/i,
+    );
+    if (afterLabel) return afterLabel[1].trim();
+
+    // Fallback: H1 heading
+    const h1 = markdown.match(/^#\s+(.+)$/m);
+    if (h1) return h1[1].trim();
+
+    return "";
+  }
+
+  function storeProjectName(id: number, markdown: string) {
+    const name = extractProjectName(markdown);
+    if (!name) return;
+    setProjectNames((prev) => {
+      const next = { ...prev, [id]: name };
+      localStorage.setItem("docgenix_names", JSON.stringify(next));
+      return next;
+    });
+  }
 
   const pushRecent = (id: number) => {
     setRecentIds((prev) => {
@@ -177,20 +198,38 @@ export default function Home() {
         );
 
         const loadedDocs = docsData.map(
-          (d: { agent_name: string; markdown: string; arch_graph?: string }) => {
-            const doc: GeneratedDoc = { agent: d.agent_name, markdown: d.markdown };
+          (d: {
+            agent_name: string;
+            markdown: string;
+            arch_graph?: string;
+          }) => {
+            const doc: GeneratedDoc = {
+              agent: d.agent_name,
+              markdown: d.markdown,
+            };
             if (d.arch_graph) {
               try {
                 const g = JSON.parse(d.arch_graph);
                 doc.nodes = g.nodes;
                 doc.edges = g.edges;
-              } catch { /* ignore */ }
+              } catch {
+                /* ignore */
+              }
             }
             return doc;
           },
         );
-        setDocs(loadedDocs);
-        if (loadedDocs.length > 0) setSelectedDoc(loadedDocs[0]);
+        // Deduplicate by agent name, keeping the last occurrence
+        const dedupedDocs = Object.values(
+          Object.fromEntries(loadedDocs.map((d: GeneratedDoc) => [d.agent, d])),
+        ) as GeneratedDoc[];
+        setDocs(dedupedDocs);
+        if (dedupedDocs.length > 0) setSelectedDoc(dedupedDocs[0]);
+
+        const overview = dedupedDocs.find(
+          (d: GeneratedDoc) => d.agent === "Project Overview",
+        );
+        if (overview) storeProjectName(id, overview.markdown);
 
         const pool = allProjects ?? projects;
         const proj = pool.find((p) => p.id === id);
@@ -206,7 +245,12 @@ export default function Home() {
     const stored = localStorage.getItem("docgenix_recent");
     if (stored) setRecentIds(JSON.parse(stored));
 
-    const lastId = localStorage.getItem("docgenix_last");
+    const storedNames = localStorage.getItem("docgenix_names");
+    if (storedNames) setProjectNames(JSON.parse(storedNames));
+
+    // Check URL param ?project=ID first, then fall back to last visited
+    const urlId = new URLSearchParams(window.location.search).get("project");
+    const lastId = urlId ?? localStorage.getItem("docgenix_last");
 
     fetchProjects().then((allProjects) => {
       if (lastId && allProjects.length > 0) {
@@ -219,6 +263,25 @@ export default function Home() {
     setMounted(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Close share menu when clicking outside
+  useEffect(() => {
+    if (!showShareMenu) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
+        setShowShareMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showShareMenu]);
+
+  useEffect(() => {
+    if (projectId === null) return;
+    const overview = docs.find((d) => d.agent === "Project Overview");
+    if (overview) storeProjectName(projectId, overview.markdown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docs, projectId]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -243,6 +306,7 @@ export default function Home() {
       const decoder = new TextDecoder();
       if (!reader) return;
 
+      let currentProjId = projectId;
       let buffer = "";
       while (true) {
         const { done, value } = await reader.read();
@@ -257,6 +321,7 @@ export default function Home() {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.type === "project") {
+              currentProjId = data.project_id;
               setProjectId(data.project_id);
               fetchProjects();
             } else if (data.type === "status") {
@@ -272,6 +337,9 @@ export default function Home() {
                 return [...filtered, newDoc];
               });
               setSelectedDoc(newDoc);
+              if (data.agent === "Project Overview" && currentProjId !== null) {
+                storeProjectName(currentProjId, data.markdown);
+              }
               setActiveAgents((prev) => {
                 const next = new Set(prev);
                 next.delete(data.agent);
@@ -335,7 +403,10 @@ export default function Home() {
               assistantMsg += data.content;
               setChatMessages((prev) => {
                 const updated = [...prev];
-                updated[updated.length - 1] = { role: "assistant", content: assistantMsg };
+                updated[updated.length - 1] = {
+                  role: "assistant",
+                  content: assistantMsg,
+                };
                 return updated;
               });
             } else if (data.type === "result") {
@@ -348,7 +419,10 @@ export default function Home() {
               assistantMsg += `\n\n_${data.message}_\n\n`;
               setChatMessages((prev) => {
                 const updated = [...prev];
-                updated[updated.length - 1] = { role: "assistant", content: assistantMsg };
+                updated[updated.length - 1] = {
+                  role: "assistant",
+                  content: assistantMsg,
+                };
                 return updated;
               });
             }
@@ -383,9 +457,23 @@ export default function Home() {
   const isError = genStatus.startsWith("Error");
   const isAllDone = genStatus === "All documents generated";
 
+  function handleDownloadZip() {
+    if (projectId === null) return;
+    window.open(`${API_URL}/projects/${projectId}/export`, "_blank");
+    setShowShareMenu(false);
+  }
+
+  function handleCopyLink() {
+    if (projectId === null) return;
+    const url = `${window.location.origin}?project=${projectId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 2000);
+    });
+  }
+
   return (
     <div className={s.appShell}>
-
       {/* ── Sidebar ── */}
       <aside className={s.sidebar}>
         <div className={s.sidebarBrand}>
@@ -397,20 +485,14 @@ export default function Home() {
         </div>
 
         <nav className={s.sidebarNav}>
-          <button type="button" onClick={handleNewProject} className={s.btnNewProject}>
+          <button
+            type="button"
+            onClick={handleNewProject}
+            className={s.btnNewProject}
+          >
             <IconPlus />
             New Project
           </button>
-          {NAV_ITEMS.map(({ label, icon }) => (
-            <button
-              type="button"
-              key={label}
-              className={s.navItem}
-            >
-              <span>{icon}</span>
-              {label}
-            </button>
-          ))}
         </nav>
 
         {projects.length > 0 && (
@@ -436,18 +518,16 @@ export default function Home() {
                     title={proj.idea}
                   >
                     <span className={s.projectId}>#{proj.id}</span>
-                    {proj.idea}
+                    {projectNames[proj.id] || proj.idea}
                   </button>
                 ))}
             </div>
           </div>
         )}
-
       </aside>
 
       {/* ── Main Area ── */}
       <div className={s.mainArea}>
-
         {/* Top Nav */}
         <header className={s.topnav}>
           <div className={s.breadcrumbs}>
@@ -455,28 +535,55 @@ export default function Home() {
             {projectId !== null && (
               <>
                 <span className={s.breadcrumbSep}>/</span>
-                <span>Project #{projectId}</span>
+                <span>
+                  {projectId !== null && projectNames[projectId]
+                    ? projectNames[projectId]
+                    : `Project #${projectId}`}
+                </span>
                 <span className={s.breadcrumbSep}>/</span>
-                <span className={s.breadcrumbCurrent}>{selectedDoc?.agent ?? "Overview"}</span>
+                <span className={s.breadcrumbCurrent}>
+                  {selectedDoc?.agent ?? "Overview"}
+                </span>
               </>
             )}
           </div>
           <div className={s.topnavActions}>
-            <div className={s.topnavSearch}>
-              <IconSearch />
-              SEARCH ARCHIVES...
+            <div ref={shareRef} className={s.shareWrapper}>
+              <button
+                type="button"
+                className={s.btnShare}
+                onClick={() => setShowShareMenu((v) => !v)}
+                disabled={projectId === null}
+              >
+                Share
+              </button>
+              {showShareMenu && (
+                <div className={s.shareMenu}>
+                  <button
+                    type="button"
+                    className={s.shareMenuItem}
+                    onClick={handleDownloadZip}
+                  >
+                    <span className={s.shareMenuIcon}>⬇</span>
+                    Download as ZIP
+                  </button>
+                  <button
+                    type="button"
+                    className={s.shareMenuItem}
+                    onClick={handleCopyLink}
+                  >
+                    <span className={s.shareMenuIcon}>{copyDone ? "✓" : "⎘"}</span>
+                    {copyDone ? "Link copied!" : "Copy share link"}
+                  </button>
+                </div>
+              )}
             </div>
-            <div className={s.topnavDivider} />
-            <button type="button" className={s.btnShare}>Share</button>
-            <button type="button" className={s.btnDeploy}>Deploy</button>
           </div>
         </header>
 
         <div className={s.contentRow}>
-
           {/* ── Left Input Panel ── */}
           <div className={s.inputPanel}>
-
             {/* System Prompt */}
             <div>
               <div className={s.panelLabel}>SYSTEM PROMPT</div>
@@ -484,7 +591,9 @@ export default function Home() {
                 <textarea
                   className={s.promptTextarea}
                   rows={6}
-                  placeholder={'Describe your software project...\ne.g. "A scalable microservices platform for e-commerce using Kafka and Go."'}
+                  placeholder={
+                    'Describe your software project...\ne.g. "A scalable microservices platform for e-commerce using Kafka and Go."'
+                  }
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
                 />
@@ -504,8 +613,15 @@ export default function Home() {
             <div>
               <div className={s.panelSublabel}>OUTPUT TYPE</div>
               <div className={s.outputToggle}>
-                <button type="button" className={`${s.toggleBtn} ${s.toggleBtnActive}`}>Documentation</button>
-                <button type="button" className={s.toggleBtn}>Diagrams</button>
+                <button
+                  type="button"
+                  className={`${s.toggleBtn} ${s.toggleBtnActive}`}
+                >
+                  Documentation
+                </button>
+                <button type="button" className={s.toggleBtn}>
+                  Diagrams
+                </button>
               </div>
             </div>
 
@@ -516,20 +632,35 @@ export default function Home() {
               disabled={genLoading || !idea.trim()}
               className={s.btnRunAll}
             >
-              {genLoading ? <><Spinner size={12} /><span>Running…</span></> : "Run All Agents"}
+              {genLoading ? (
+                <>
+                  <Spinner size={12} />
+                  <span>Running…</span>
+                </>
+              ) : (
+                "Run All Agents"
+              )}
             </button>
 
             {/* Progress */}
             {genLoading && completedCount > 0 && (
               <div>
                 <div className={s.progressRow}>
-                  <span>{completedCount} / {totalAgents} complete</span>
-                  <span>{Math.round((completedCount / totalAgents) * 100)}%</span>
+                  <span>
+                    {completedCount} / {totalAgents} complete
+                  </span>
+                  <span>
+                    {Math.round((completedCount / totalAgents) * 100)}%
+                  </span>
                 </div>
                 <div className={s.progressTrack}>
                   <div
                     className={s.progressFill}
-                    style={{ "--progress-width": `${(completedCount / totalAgents) * 100}%` } as React.CSSProperties}
+                    style={
+                      {
+                        "--progress-width": `${(completedCount / totalAgents) * 100}%`,
+                      } as React.CSSProperties
+                    }
                   />
                 </div>
               </div>
@@ -537,9 +668,13 @@ export default function Home() {
 
             {/* AI Context card */}
             {genStatus && (
-              <div className={`${s.aiContextCard} ${isError ? s.aiContextCardError : isAllDone ? s.aiContextCardSuccess : ""}`}>
+              <div
+                className={`${s.aiContextCard} ${isError ? s.aiContextCardError : isAllDone ? s.aiContextCardSuccess : ""}`}
+              >
                 <div className={s.aiContextLabel}>AI CONTEXT</div>
-                <div className={`${s.aiContextText} ${isError ? s.aiContextTextError : isAllDone ? s.aiContextTextSuccess : ""}`}>
+                <div
+                  className={`${s.aiContextText} ${isError ? s.aiContextTextError : isAllDone ? s.aiContextTextSuccess : ""}`}
+                >
                   {genStatus}
                 </div>
               </div>
@@ -559,7 +694,9 @@ export default function Home() {
                   const itemClass = [
                     s.agentItem,
                     isDone && !isSelected ? s.agentItemDone : "",
-                    isSelected ? s[`agentItemSelected${ck}` as keyof typeof s] : "",
+                    isSelected
+                      ? s[`agentItemSelected${ck}` as keyof typeof s]
+                      : "",
                   ].join(" ");
 
                   const iconClass = `${s.agentIconBox} ${isActive || isDone ? s[`agentIcon${ck}` as keyof typeof s] : s.agentIconIdle}`;
@@ -572,14 +709,24 @@ export default function Home() {
                     <button
                       type="button"
                       key={agent}
-                      onClick={() => (isDone && doc ? setSelectedDoc(doc) : handleGenerate(agent))}
-                      disabled={isActive || (!isDone && (genLoading || !idea.trim()))}
+                      onClick={() =>
+                        isDone && doc
+                          ? setSelectedDoc(doc)
+                          : handleGenerate(agent)
+                      }
+                      disabled={
+                        isActive || (!isDone && (genLoading || !idea.trim()))
+                      }
                       className={itemClass}
                     >
-                      <span className={iconClass}>{AGENT_ICONS[agent] ?? "•"}</span>
+                      <span className={iconClass}>
+                        {AGENT_ICONS[agent] ?? "•"}
+                      </span>
                       <span className={labelClass}>{agent}</span>
                       {isActive && <Spinner size={12} />}
-                      {isDone && !isActive && <span className={checkClass}>✓</span>}
+                      {isDone && !isActive && (
+                        <span className={checkClass}>✓</span>
+                      )}
                     </button>
                   );
                 })}
@@ -606,15 +753,22 @@ export default function Home() {
 
                 <div className={s.docContent}>
                   <h1 className={s.docTitle}>{selectedDoc.agent}</h1>
-                  <p className={s.docSubtitle}>v1.0 · Generated by DocGenix AI</p>
+                  <p className={s.docSubtitle}>
+                    v1.0 · Generated by DocGenix AI
+                  </p>
 
                   {selectedDoc.agent === "System Architecture" &&
                   selectedDoc.nodes &&
                   selectedDoc.nodes.length > 0 ? (
                     <>
-                      <ArchitectureDiagram nodes={selectedDoc.nodes} edges={selectedDoc.edges ?? []} />
+                      <ArchitectureDiagram
+                        nodes={selectedDoc.nodes}
+                        edges={selectedDoc.edges ?? []}
+                      />
                       <details className="mt-6">
-                        <summary className={s.rawMdToggle}>VIEW RAW MARKDOWN</summary>
+                        <summary className={s.rawMdToggle}>
+                          VIEW RAW MARKDOWN
+                        </summary>
                         <div className="mt-4 prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF]">
                           <ReactMarkdown>{selectedDoc.markdown}</ReactMarkdown>
                         </div>
@@ -632,13 +786,10 @@ export default function Home() {
                 <div className={s.emptyIcon}>◎</div>
                 <div>
                   <p className={s.emptyTitle}>No document selected</p>
-                  <p className={s.emptyDesc}>Describe your project and run an agent to generate docs</p>
+                  <p className={s.emptyDesc}>
+                    Describe your project and run an agent to generate docs
+                  </p>
                 </div>
-                {!projectId && (
-                  <button type="button" onClick={handleNewProject} className={s.btnGetStarted}>
-                    Get Started
-                  </button>
-                )}
               </div>
             )}
           </div>
@@ -649,9 +800,13 @@ export default function Home() {
               <span className={s.chatHeaderLabel}>AI ASSISTANT</span>
               <div className={s.chatHeaderRight}>
                 {activeCount > 0 && (
-                  <span className={s.chatActiveBadge}>{activeCount} Active</span>
+                  <span className={s.chatActiveBadge}>
+                    {activeCount} Active
+                  </span>
                 )}
-                <div className={`${s.chatStatusDot} ${projectId !== null ? s.chatStatusDotActive : ""}`} />
+                <div
+                  className={`${s.chatStatusDot} ${projectId !== null ? s.chatStatusDotActive : ""}`}
+                />
               </div>
             </div>
 
@@ -664,13 +819,22 @@ export default function Home() {
             <div className={s.chatMessages}>
               {chatMessages.length === 0 && projectId !== null && (
                 <div className={s.chatEmpty}>
-                  Ask about your project or<br />request document changes
+                  Ask about your project or
+                  <br />
+                  request document changes
                 </div>
               )}
               {chatMessages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  {msg.role === "assistant" && <div className={s.chatAvatar}>D</div>}
-                  <div className={msg.role === "user" ? s.msgUser : s.msgAssistant}>
+                <div
+                  key={i}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  {msg.role === "assistant" && (
+                    <div className={s.chatAvatar}>D</div>
+                  )}
+                  <div
+                    className={msg.role === "user" ? s.msgUser : s.msgAssistant}
+                  >
                     {msg.role === "assistant" ? (
                       <div className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-li:my-0.5 prose-headings:text-[#F4F6FE] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -685,9 +849,15 @@ export default function Home() {
                 <div className="flex justify-start">
                   <div className={s.chatAvatar}>D</div>
                   <div className={s.typingIndicator}>
-                    <span className={`${s.typingDot} animate-bounce [animation-delay:0ms]`} />
-                    <span className={`${s.typingDot} animate-bounce [animation-delay:150ms]`} />
-                    <span className={`${s.typingDot} animate-bounce [animation-delay:300ms]`} />
+                    <span
+                      className={`${s.typingDot} animate-bounce [animation-delay:0ms]`}
+                    />
+                    <span
+                      className={`${s.typingDot} animate-bounce [animation-delay:150ms]`}
+                    />
+                    <span
+                      className={`${s.typingDot} animate-bounce [animation-delay:300ms]`}
+                    />
                   </div>
                 </div>
               )}
@@ -698,7 +868,11 @@ export default function Home() {
               <input
                 type="text"
                 className={s.chatInput}
-                placeholder={projectId === null ? "Select a project first…" : "Message DocGenix…"}
+                placeholder={
+                  projectId === null
+                    ? "Select a project first…"
+                    : "Message DocGenix…"
+                }
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleChat()}
@@ -707,7 +881,9 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleChat}
-                disabled={projectId === null || chatLoading || !chatInput.trim()}
+                disabled={
+                  projectId === null || chatLoading || !chatInput.trim()
+                }
                 title="Send"
                 className={s.btnChatSend}
               >
@@ -715,7 +891,6 @@ export default function Home() {
               </button>
             </div>
           </div>
-
         </div>
       </div>
     </div>

@@ -62,12 +62,12 @@
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 10px 16px;
+  padding: 13px 18px;
   border-radius: 4px;
   background: rgba(37, 99, 235, 0.1);
   border: 1px solid #3B82F6;
   color: #60A5FA;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
   cursor: pointer;
   font-family: inherit;
@@ -289,11 +289,15 @@
   background: #1E293B;
 }
 
+.shareWrapper {
+  position: relative;
+}
+
 .btnShare {
-  padding: 6px 12px;
+  padding: 8px 16px;
   border-radius: 2px;
   background: #21262E;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: #E2E8F0;
   border: none;
@@ -302,6 +306,52 @@
   transition: opacity 0.15s;
 }
 .btnShare:hover { opacity: 0.8; }
+.btnShare:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.shareMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  background: #1B2027;
+  border: 1px solid #44484E;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 100;
+  animation: fadeInDown 0.12s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.shareMenuItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: #E2E8F0;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+.shareMenuItem:hover { background: #262D35; }
+
+.shareMenuIcon {
+  font-size: 14px;
+  color: #85ADFF;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
 
 .btnDeploy {
   padding: 6px 12px;
@@ -377,8 +427,8 @@
   position: absolute;
   bottom: 10px;
   right: 10px;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border-radius: 4px;
   background: #85ADFF;
   border: none;
@@ -403,9 +453,9 @@
 .toggleBtn {
   flex: 1;
   text-align: center;
-  padding: 5px 8px;
+  padding: 7px 10px;
   border-radius: 10px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   background: transparent;
   border: none;
@@ -426,10 +476,10 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 13px 18px;
   border-radius: 4px;
   background: linear-gradient(135deg, #85ADFF, #C180FF);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #000;
   letter-spacing: 0.5px;
@@ -509,7 +559,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 8px;
   background: #1B2027;
   border: 1px solid transparent;
@@ -543,7 +593,7 @@
 
 .agentLabel {
   flex: 1;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -582,8 +632,8 @@
 
 .docTab {
   flex-shrink: 0;
-  padding: 14px 16px 12px;
-  font-size: 11px;
+  padding: 16px 20px 14px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 1px;
   color: #64748B;
@@ -849,8 +899,8 @@
 .chatInput:disabled { opacity: 0.5; }
 
 .btnChatSend {
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   flex-shrink: 0;
   border-radius: 12px;
   background: #85ADFF;
