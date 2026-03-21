@@ -37,7 +37,9 @@ async def _run_single_agent(agent, prompt: str, queue: asyncio.Queue, project_id
         await save_document(project_id, agent.name, output)
         await queue.put({"type": "result", "agent": agent.name, "markdown": output})
     except Exception as e:
-        await queue.put({"type": "error", "agent": agent.name, "error": str(e)})
+        import traceback
+        traceback.print_exc()
+        await queue.put({"type": "error", "agent": agent.name, "message": str(e)})
 
 
 async def run_generation(idea: str, agent_name: str, project_id: int | None) -> AsyncGenerator[dict, None]:
