@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   backend:
     build:
@@ -8,6 +7,16 @@ services:
       - ./backend/.env
     ports:
       - "1000:1000"
+    volumes:
+      - ./backend:/backend
+    command: uvicorn main:app --host 0.0.0.0 --port 1000 --reload
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /backend
+        - action: rebuild
+          path: ./backend/requirements.txt
 
   frontend:
     build:
@@ -15,5 +24,17 @@ services:
       dockerfile: frontend.dockerfile
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend
+          target: /app
+          ignore:
+            - node_modules/
+        - action: rebuild
+          path: ./frontend/package.json
