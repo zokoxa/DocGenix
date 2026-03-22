@@ -142,7 +142,7 @@ export default function Home() {
   const [projectNames, setProjectNames] = useState<Record<number, string>>({});
 
   const [outputMode, setOutputMode] = useState<"docs" | "diagrams">("docs");
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
@@ -323,6 +323,8 @@ export default function Home() {
     setGenLoading(true);
     setActiveAgents(agent === "all" ? new Set(AGENTS) : new Set([agent]));
 
+    let currentProjId = myProjId;
+
     try {
       const res = await fetch(`${API_URL}/generate`, {
         method: "POST",
@@ -333,8 +335,6 @@ export default function Home() {
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) return;
-
-      let currentProjId = myProjId;
       let buffer = "";
       while (true) {
         const { done, value } = await reader.read();
@@ -350,6 +350,7 @@ export default function Home() {
             const data = JSON.parse(line.slice(6));
             if (data.type === "project") {
               currentProjId = data.project_id;
+              projectIdRef.current = data.project_id;
               setProjectId(data.project_id);
               fetchProjects();
             } else if (data.type === "status") {
@@ -391,7 +392,7 @@ export default function Home() {
       }
     } catch {
     } finally {
-      if (projectIdRef.current === myProjId) {
+      if (projectIdRef.current === currentProjId) {
         setGenLoading(false);
         setActiveAgents(new Set());
       }
@@ -399,6 +400,7 @@ export default function Home() {
   }
 
   async function streamChat(pid: number, message: string) {
+    setChatOpen(true);
     setChatMessages((prev) => [...prev, { role: "user", content: message }]);
     setChatLoading(true);
 
@@ -476,6 +478,7 @@ export default function Home() {
     if (!chatInput.trim() || projectId === null) return;
     const msg = chatInput;
     setChatInput("");
+    setChatOpen(true);
     await streamChat(projectId, msg);
   }
 
@@ -534,32 +537,12 @@ export default function Home() {
       <aside
         className={`${s.sidebar} ${isSidebarCollapsed ? s.sidebarCollapsed : ""}`}
       >
-        <div className={s.sidebarBrand}>
-          <div className={s.brandLogo}>D</div>
-          <div className={s.brandText}>
-            <div className={s.brandName}>DocGenix</div>
-            <div className={s.brandSubtitle}>AI WORKSPACE</div>
-          </div>
-          {!isSidebarCollapsed && (
-            <button
-              type="button"
-              className={s.sidebarCollapseBtn}
-              onClick={() => setIsSidebarCollapsed((v) => !v)}
-              aria-label="Collapse side panel"
-              title="Collapse side panel"
-            >
-              <IconSidebarToggle collapsed={false} />
-            </button>
-          )}
-        </div>
-
         {isSidebarCollapsed ? (
           <div className={s.collapsedIconStack}>
             <button
               type="button"
               className={s.sidebarCollapseBtn}
               onClick={() => setIsSidebarCollapsed((v) => !v)}
-              aria-label="Expand side panel"
               title="Expand side panel"
             >
               <IconSidebarToggle collapsed />
@@ -568,25 +551,40 @@ export default function Home() {
               type="button"
               onClick={handleNewProject}
               className={`${s.btnNewProject} ${s.btnNewProjectCollapsed}`}
-              aria-label="New Project"
               title="New Project"
             >
               <IconPlus />
             </button>
           </div>
         ) : (
-          <nav className={s.sidebarNav}>
-            <button
-              type="button"
-              onClick={handleNewProject}
-              className={s.btnNewProject}
-              aria-label="New Project"
-              title="New Project"
-            >
-              <IconPlus />
-              <span className={s.sidebarButtonText}>New Project</span>
-            </button>
-          </nav>
+          <>
+            <div className={s.sidebarBrand}>
+              <div className={s.brandLogo}>D</div>
+              <div className={s.brandText}>
+                <div className={s.brandName}>DocGenix</div>
+                <div className={s.brandSubtitle}>AI WORKSPACE</div>
+              </div>
+              <button
+                type="button"
+                className={s.sidebarCollapseBtn}
+                onClick={() => setIsSidebarCollapsed((v) => !v)}
+                title="Collapse side panel"
+              >
+                <IconSidebarToggle collapsed={false} />
+              </button>
+            </div>
+            <nav className={s.sidebarNav}>
+              <button
+                type="button"
+                onClick={handleNewProject}
+                className={s.btnNewProject}
+                title="New Project"
+              >
+                <IconPlus />
+                <span className={s.sidebarButtonText}>New Project</span>
+              </button>
+            </nav>
+          </>
         )}
 
         {projects.length > 0 && (
@@ -1004,7 +1002,7 @@ export default function Home() {
                       <div className={s.chatAvatar}>D</div>
                       <div className={s.typingIndicator}>
                         <span className={`${s.typingDot} animate-bounce [animation-delay:0ms]`} />
-                        <span className={`${s.typingDot} animate-bounce [animation-delay:150ms]`} />
+                        <span className={`${s.typingDot} animate-bounce [animation-delay:300ms]`} />
                         <span className={`${s.typingDot} animate-bounce [animation-delay:300ms]`} />
                       </div>
                     </div>

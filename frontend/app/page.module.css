@@ -153,37 +153,13 @@
   gap: 14px;
 }
 
-.sidebarCollapsed .sidebarBrand {
-  justify-content: flex-start;
-  align-items: center;
-  padding: 16px 0 0;
-  gap: 0;
-}
-
-.sidebarCollapsed .brandLogo {
-  opacity: 0;
-  transform: translateX(-48px);
-  position: absolute;
-  left: 16px;
-  pointer-events: none;
-}
-
-.sidebarCollapsed .brandText {
-  opacity: 0;
-  transform: translateX(-8px);
-}
-
-.sidebarCollapsed .sidebarNav {
-  padding: 0;
-}
-
 .btnNewProjectCollapsed {
   display: inline-flex;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   padding: 0;
-  border-radius: 4px;
+  border-radius: 8px;
   margin: 0 auto;
   gap: 0;
   align-items: center;
@@ -192,12 +168,6 @@
 .btnNewProjectCollapsed svg {
   width: 18px;
   height: 18px;
-  line-height: 0;
-}
-
-.sidebarCollapsed .sidebarButtonText {
-  opacity: 0;
-  transform: translateX(-8px);
 }
 
 .navItem {

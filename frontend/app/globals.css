@@ -1,5 +1,37 @@
 @import "tailwindcss";
 
+/* ReactFlow Controls — dark theme */
+.react-flow__controls {
+  background: #151A20;
+  border: 1px solid #2a3040;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: #151A20;
+  border-bottom: 1px solid #2a3040;
+  color: #94a3b8;
+  fill: #94a3b8;
+  width: 28px;
+  height: 28px;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__controls-button:hover {
+  background: #21262E;
+  color: #F4F6FE;
+  fill: #F4F6FE;
+}
+
+.react-flow__controls-button svg {
+  fill: inherit;
+}
+
 :root {
   --font-inter: "Inter", sans-serif;
 }
