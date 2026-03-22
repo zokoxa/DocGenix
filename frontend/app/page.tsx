@@ -11,6 +11,9 @@ import s from "./page.module.css";
 
 const API_URL = "http://localhost:1000";
 
+// Agents that produce a visual diagram (nodes/edges)
+const DIAGRAM_AGENTS = ["System Architecture", "Data Model"];
+
 const AGENTS = [
   "Project Overview",
   "Requirements",
@@ -126,9 +129,14 @@ export default function Home() {
   const [recentIds, setRecentIds] = useState<number[]>([]);
   const [projectNames, setProjectNames] = useState<Record<number, string>>({});
 
+  const [outputMode, setOutputMode] = useState<"docs" | "diagrams">("docs");
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
+
+  // Always reflects the latest projectId so async callbacks can guard against stale project
+  const projectIdRef = useRef<number | null>(null);
+  useEffect(() => { projectIdRef.current = projectId; }, [projectId]);
 
   function extractProjectName(markdown: string): string {
     // Find name after "Project Name Suggestion" label — strips **, [], and descriptions
@@ -286,6 +294,8 @@ export default function Home() {
 
   async function handleGenerate(agent: string) {
     if (!idea.trim()) return;
+    // Capture which project this generation belongs to
+    const myProjId = projectId;
     setGenLoading(true);
     setActiveAgents(agent === "all" ? new Set(AGENTS) : new Set([agent]));
     setGenStatus(agent === "all" ? "Running all agents…" : `Running ${agent}…`);
@@ -294,14 +304,14 @@ export default function Home() {
       const res = await fetch(`${API_URL}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea, agent, project_id: projectId }),
+        body: JSON.stringify({ idea, agent, project_id: myProjId }),
       });
 
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) return;
 
-      let currentProjId = projectId;
+      let currentProjId = myProjId;
       let buffer = "";
       while (true) {
         const { done, value } = await reader.read();
@@ -320,7 +330,10 @@ export default function Home() {
               setProjectId(data.project_id);
               fetchProjects();
             } else if (data.type === "status") {
-              setGenStatus(data.message || `Running ${data.agent}…`);
+              // Only update UI status if we're still on this project
+              if (projectIdRef.current === currentProjId) {
+                setGenStatus(data.message || `Running ${data.agent}…`);
+              }
             } else if (data.type === "result") {
               const newDoc: GeneratedDoc = {
                 agent: data.agent,
@@ -328,24 +341,32 @@ export default function Home() {
                 doc_id: data.doc_id,
                 ...(data.nodes ? { nodes: data.nodes, edges: data.edges } : {}),
               };
-              setDocs((prev) => {
-                const filtered = prev.filter((d) => d.agent !== data.agent);
-                return [...filtered, newDoc];
-              });
-              setSelectedDoc(newDoc);
+              // Always store the name (safe regardless of which project is active)
               if (data.agent === "Project Overview" && currentProjId !== null) {
                 storeProjectName(currentProjId, data.markdown);
               }
-              setActiveAgents((prev) => {
-                const next = new Set(prev);
-                next.delete(data.agent);
-                return next;
-              });
+              // Only mutate visible state if the user is still viewing this project
+              if (projectIdRef.current === currentProjId) {
+                setDocs((prev) => {
+                  const filtered = prev.filter((d) => d.agent !== data.agent);
+                  return [...filtered, newDoc];
+                });
+                setSelectedDoc(newDoc);
+                setActiveAgents((prev) => {
+                  const next = new Set(prev);
+                  next.delete(data.agent);
+                  return next;
+                });
+              }
             } else if (data.type === "error") {
-              setGenStatus(`Error: ${data.message}`);
+              if (projectIdRef.current === currentProjId) {
+                setGenStatus(`Error: ${data.message}`);
+              }
             } else if (data.type === "done") {
-              setGenStatus("All documents generated");
-              setActiveAgents(new Set());
+              if (projectIdRef.current === currentProjId) {
+                setGenStatus("All documents generated");
+                setActiveAgents(new Set());
+              }
             }
           } catch {
             // skip
@@ -353,10 +374,14 @@ export default function Home() {
         }
       }
     } catch (err) {
-      setGenStatus(`Error: ${err}`);
+      if (projectIdRef.current === myProjId) {
+        setGenStatus(`Error: ${err}`);
+      }
     } finally {
-      setGenLoading(false);
-      setActiveAgents(new Set());
+      if (projectIdRef.current === myProjId) {
+        setGenLoading(false);
+        setActiveAgents(new Set());
+      }
     }
   }
 
@@ -469,8 +494,6 @@ export default function Home() {
     setActiveAgents(new Set());
   }
 
-  const completedCount = docs.length;
-  const totalAgents = AGENTS.length;
   const activeCount = activeAgents.size;
   const isError = genStatus.startsWith("Error");
   const isAllDone = genStatus === "All documents generated";
@@ -633,11 +656,16 @@ export default function Home() {
               <div className={s.outputToggle}>
                 <button
                   type="button"
-                  className={`${s.toggleBtn} ${s.toggleBtnActive}`}
+                  onClick={() => setOutputMode("docs")}
+                  className={`${s.toggleBtn} ${outputMode === "docs" ? s.toggleBtnActive : ""}`}
                 >
                   Documentation
                 </button>
-                <button type="button" className={s.toggleBtn}>
+                <button
+                  type="button"
+                  onClick={() => setOutputMode("diagrams")}
+                  className={`${s.toggleBtn} ${outputMode === "diagrams" ? s.toggleBtnActive : ""}`}
+                >
                   Diagrams
                 </button>
               </div>
@@ -660,29 +688,6 @@ export default function Home() {
               )}
             </button>
 
-            {/* Progress */}
-            {genLoading && completedCount > 0 && (
-              <div>
-                <div className={s.progressRow}>
-                  <span>
-                    {completedCount} / {totalAgents} complete
-                  </span>
-                  <span>
-                    {Math.round((completedCount / totalAgents) * 100)}%
-                  </span>
-                </div>
-                <div className={s.progressTrack}>
-                  <div
-                    className={s.progressFill}
-                    style={
-                      {
-                        "--progress-width": `${(completedCount / totalAgents) * 100}%`,
-                      } as React.CSSProperties
-                    }
-                  />
-                </div>
-              </div>
-            )}
 
             {/* AI Context card */}
             {genStatus && (
@@ -702,7 +707,7 @@ export default function Home() {
             <div>
               <div className={s.panelSublabel}>AGENTS</div>
               <div className={s.agentsList}>
-                {AGENTS.map((agent) => {
+                {(outputMode === "diagrams" ? DIAGRAM_AGENTS : AGENTS.filter((a) => !DIAGRAM_AGENTS.includes(a))).map((agent) => {
                   const isActive = activeAgents.has(agent);
                   const isDone = docs.some((d) => d.agent === agent);
                   const doc = docs.find((d) => d.agent === agent);
@@ -753,64 +758,82 @@ export default function Home() {
           </div>
 
           {/* ── Center: Doc Viewer ── */}
-          <div className={s.centerPanel}>
-            {selectedDoc ? (
-              <>
-                <div className={s.docTabs}>
-                  {docs.map((doc) => (
-                    <button
-                      type="button"
-                      key={doc.agent}
-                      onClick={() => setSelectedDoc(doc)}
-                      className={`${s.docTab} ${selectedDoc.agent === doc.agent ? s.docTabActive : ""}`}
-                    >
-                      {doc.agent.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
+          {(() => {
+            const diagramDocs = docs.filter((d) => DIAGRAM_AGENTS.includes(d.agent) && d.nodes && d.nodes.length > 0);
+            const activeDiagram = diagramDocs.find((d) => d.agent === selectedDoc?.agent) ?? diagramDocs[0] ?? null;
+            const docOnlyDocs = docs.filter((d) => !DIAGRAM_AGENTS.includes(d.agent));
+            const activeDoc = (selectedDoc && !DIAGRAM_AGENTS.includes(selectedDoc.agent)) ? selectedDoc : docOnlyDocs[0] ?? null;
 
-                <div className={s.docContent}>
-                  <h1 className={s.docTitle}>{selectedDoc.agent}</h1>
-                  <p className={s.docSubtitle}>
-                    v1.0 · Generated by DocGenix AI
-                  </p>
-
-                  {selectedDoc.agent === "System Architecture" &&
-                  selectedDoc.nodes &&
-                  selectedDoc.nodes.length > 0 ? (
+            return (
+              <div className={s.centerPanel}>
+                {outputMode === "diagrams" ? (
+                  diagramDocs.length > 0 ? (
                     <>
-                      <ArchitectureDiagram
-                        nodes={selectedDoc.nodes}
-                        edges={selectedDoc.edges ?? []}
-                      />
-                      <details className="mt-6">
-                        <summary className={s.rawMdToggle}>
-                          VIEW RAW MARKDOWN
-                        </summary>
-                        <div className="mt-4 prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF]">
-                          <ReactMarkdown>{selectedDoc.markdown}</ReactMarkdown>
+                      <div className={s.docTabs}>
+                        {diagramDocs.map((doc) => (
+                          <button type="button" key={doc.agent} onClick={() => setSelectedDoc(doc)}
+                            className={`${s.docTab} ${activeDiagram?.agent === doc.agent ? s.docTabActive : ""}`}>
+                            {doc.agent.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                      {activeDiagram && (
+                        <div className={s.docContent}>
+                          <h1 className={s.docTitle}>{activeDiagram.agent}</h1>
+                          <p className={s.docSubtitle}>v1.0 · Generated by DocGenix AI</p>
+                          <ArchitectureDiagram nodes={activeDiagram.nodes!} edges={activeDiagram.edges ?? []} />
+                          <details className="mt-6">
+                            <summary className={s.rawMdToggle}>VIEW RAW MARKDOWN</summary>
+                            <div className="mt-4 prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF]">
+                              <ReactMarkdown>{activeDiagram.markdown}</ReactMarkdown>
+                            </div>
+                          </details>
                         </div>
-                      </details>
+                      )}
                     </>
                   ) : (
-                    <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
-                      <ReactMarkdown>{selectedDoc.markdown}</ReactMarkdown>
+                    <div className={s.emptyState}>
+                      <div className={s.emptyIcon}>⬡</div>
+                      <div>
+                        <p className={s.emptyTitle}>No diagrams yet</p>
+                        <p className={s.emptyDesc}>Generate System Architecture or Data Model to view diagrams</p>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className={s.emptyState}>
-                <div className={s.emptyIcon}>◎</div>
-                <div>
-                  <p className={s.emptyTitle}>No document selected</p>
-                  <p className={s.emptyDesc}>
-                    Describe your project and run an agent to generate docs
-                  </p>
-                </div>
+                  )
+                ) : (
+                  docOnlyDocs.length > 0 ? (
+                    <>
+                      <div className={s.docTabs}>
+                        {docOnlyDocs.map((doc) => (
+                          <button type="button" key={doc.agent} onClick={() => setSelectedDoc(doc)}
+                            className={`${s.docTab} ${activeDoc?.agent === doc.agent ? s.docTabActive : ""}`}>
+                            {doc.agent.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                      {activeDoc && (
+                        <div className={s.docContent}>
+                          <h1 className={s.docTitle}>{activeDoc.agent}</h1>
+                          <p className={s.docSubtitle}>v1.0 · Generated by DocGenix AI</p>
+                          <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
+                            <ReactMarkdown>{activeDoc.markdown}</ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className={s.emptyState}>
+                      <div className={s.emptyIcon}>◎</div>
+                      <div>
+                        <p className={s.emptyTitle}>No document selected</p>
+                        <p className={s.emptyDesc}>Describe your project and run an agent to generate docs</p>
+                      </div>
+                    </div>
+                  )
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* ── Right Panel: AI Assistant ── */}
           <div className={s.chatPanel}>
