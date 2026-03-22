@@ -112,12 +112,36 @@ function IconPlus() {
 
 function IconSidebarToggle({ collapsed }: { collapsed: boolean }) {
   return (
-    <svg viewBox="0 0 20 20" fill="none" width="18" height="18" aria-hidden="true">
-      <rect x="1.75" y="3" width="16.5" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      width="18"
+      height="18"
+      aria-hidden="true"
+    >
+      <rect
+        x="1.75"
+        y="3"
+        width="16.5"
+        height="14"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       {collapsed ? (
-        <path d="M7 4v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path
+          d="M7 4v12"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
       ) : (
-        <path d="M13 4v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path
+          d="M13 4v12"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
       )}
     </svg>
   );
@@ -125,9 +149,27 @@ function IconSidebarToggle({ collapsed }: { collapsed: boolean }) {
 
 export default function Home() {
   const [idea, setIdea] = useState("");
-  const [ideaLocked, setIdeaLocked] = useState(false);
   const [contextReady, setContextReady] = useState(false);
   const [projectId, setProjectId] = useState<number | null>(null);
+  const [lockedProjects, setLockedProjects] = useState<Set<number>>(() => {
+    try {
+      const stored = localStorage.getItem("lockedProjects");
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const ideaLocked = projectId !== null && lockedProjects.has(projectId);
+  function lockProject(id: number) {
+    setLockedProjects((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        localStorage.setItem("lockedProjects", JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  }
   const [docs, setDocs] = useState<GeneratedDoc[]>([]);
   const [genLoading, setGenLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<GeneratedDoc | null>(null);
@@ -196,9 +238,48 @@ export default function Home() {
   const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/projects`);
-      const data = await res.json();
+      const data = (await res.json()) as Project[];
       setProjects(data);
-      return data as Project[];
+
+      // Purge stale localStorage entries that reference deleted project IDs
+      const validIds = new Set(data.map((p) => p.id));
+
+      try {
+        const storedLocked = localStorage.getItem("lockedProjects");
+        if (storedLocked) {
+          const cleaned = JSON.parse(storedLocked).filter((id: number) =>
+            validIds.has(id),
+          );
+          localStorage.setItem("lockedProjects", JSON.stringify(cleaned));
+          setLockedProjects(new Set(cleaned));
+        }
+
+        const storedRecent = localStorage.getItem("docgenix_recent");
+        if (storedRecent) {
+          const cleaned = JSON.parse(storedRecent).filter((id: number) =>
+            validIds.has(id),
+          );
+          localStorage.setItem("docgenix_recent", JSON.stringify(cleaned));
+        }
+
+        const storedNames = localStorage.getItem("docgenix_names");
+        if (storedNames) {
+          const names = JSON.parse(storedNames) as Record<string, string>;
+          const cleaned = Object.fromEntries(
+            Object.entries(names).filter(([id]) => validIds.has(Number(id))),
+          );
+          localStorage.setItem("docgenix_names", JSON.stringify(cleaned));
+        }
+
+        const lastId = localStorage.getItem("docgenix_last");
+        if (lastId && !validIds.has(Number(lastId))) {
+          localStorage.removeItem("docgenix_last");
+        }
+      } catch {
+        /* ignore storage errors */
+      }
+
+      return data;
     } catch {
       return [];
     }
@@ -207,7 +288,6 @@ export default function Home() {
   const loadProject = useCallback(
     async (id: number, allProjects?: Project[]) => {
       setProjectId(id);
-      setIdeaLocked(false);
       setChatMessages([]);
       setDocs([]);
       setSelectedDoc(null);
@@ -328,6 +408,7 @@ export default function Home() {
     // Capture which project this generation belongs to
     const myProjId = projectId;
     setGenLoading(true);
+    setContextReady(false);
     setActiveAgents(agent === "all" ? new Set(AGENTS) : new Set([agent]));
     setCriticStatus(null);
     setCurrentIteration(0);
@@ -437,7 +518,7 @@ export default function Home() {
 
   async function streamChat(pid: number, message: string) {
     setChatOpen(true);
-    setIdeaLocked(true);
+    lockProject(pid);
     setChatMessages((prev) => [...prev, { role: "user", content: message }]);
     setChatLoading(true);
 
@@ -470,7 +551,7 @@ export default function Home() {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.type === "token") {
-              assistantMsg += data.content;
+              assistantMsg += (data.content ?? "").replace(/<\/?think>/gi, "");
               setChatMessages((prev) => {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
@@ -480,27 +561,36 @@ export default function Home() {
                 return updated;
               });
             } else if (data.type === "result") {
+              assistantMsg = "";
               const newDoc = { agent: data.agent, markdown: data.markdown };
               setDocs((prev) => {
                 const filtered = prev.filter((d) => d.agent !== data.agent);
                 return [...filtered, newDoc];
               });
-            } else if (data.type === "status") {
-              assistantMsg += `\n\n_${data.message}_\n\n`;
-              setChatMessages((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1] = {
-                  role: "assistant",
-                  content: assistantMsg,
-                };
-                return updated;
-              });
+            } else if (data.type === "status" && data.message) {
+              assistantMsg = "";
+              setChatMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: `_${data.message}_` },
+              ]);
+            } else if (data.type === "chat_message") {
+              assistantMsg = "";
+              setChatMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: data.content },
+              ]);
             } else if (data.type === "done" && data.context) {
               setIdea(data.context);
               const fields = ["platform", "features", "tech_stack", "audience"];
               const complete = fields.every((f) => {
-                const match = data.context.match(new RegExp(`${f}:\\s*(.+)`, "i"));
-                return match && match[1].trim().toLowerCase() !== "unknown" && match[1].trim() !== "";
+                const match = data.context.match(
+                  new RegExp(`${f}:\\s*(.+)`, "i"),
+                );
+                return (
+                  match &&
+                  match[1].trim().toLowerCase() !== "unknown" &&
+                  match[1].trim() !== ""
+                );
               });
               setContextReady(complete);
             }
@@ -548,7 +638,6 @@ export default function Home() {
   function handleNewProject() {
     setProjectId(null);
     setIdea("");
-    setIdeaLocked(false);
     setContextReady(false);
     setChatMessages([]);
     setDocs([]);
@@ -559,6 +648,37 @@ export default function Home() {
   async function handleDeleteProject(id: number) {
     await fetch(`${API_URL}/projects/${id}`, { method: "DELETE" });
     if (projectId === id) handleNewProject();
+
+    // Remove from all localStorage entries
+    try {
+      setLockedProjects((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        localStorage.setItem("lockedProjects", JSON.stringify([...next]));
+        return next;
+      });
+
+      const storedRecent = localStorage.getItem("docgenix_recent");
+      if (storedRecent) {
+        const cleaned = JSON.parse(storedRecent).filter(
+          (i: number) => i !== id,
+        );
+        localStorage.setItem("docgenix_recent", JSON.stringify(cleaned));
+      }
+
+      const storedNames = localStorage.getItem("docgenix_names");
+      if (storedNames) {
+        const names = JSON.parse(storedNames) as Record<string, string>;
+        delete names[String(id)];
+        localStorage.setItem("docgenix_names", JSON.stringify(names));
+      }
+
+      const lastId = localStorage.getItem("docgenix_last");
+      if (lastId === String(id)) localStorage.removeItem("docgenix_last");
+    } catch {
+      /* ignore */
+    }
+
     fetchProjects();
   }
   const activeCount = activeAgents.size;
@@ -581,7 +701,10 @@ export default function Home() {
   return (
     <div className={s.appShell}>
       {contextReady && !genLoading && (
-        <div className={s.contextReadyOverlay} onClick={() => handleGenerate("all")} />
+        <div
+          className={s.contextReadyOverlay}
+          onClick={() => setContextReady(false)}
+        />
       )}
       {/* ── Sidebar ── */}
       <aside
@@ -759,17 +882,24 @@ export default function Home() {
                   placeholder={"Describe your software project here!"}
                   value={idea}
                   readOnly={ideaLocked}
+                  title={
+                    ideaLocked
+                      ? "Context locked — use the AI Assistant chat on the right to refine your project"
+                      : undefined
+                  }
                   onChange={(e) => !ideaLocked && setIdea(e.target.value)}
                 />
-                <button
-                  type="button"
-                  onClick={handleSubmitIdea}
-                  disabled={chatLoading || !idea.trim()}
-                  title="Start conversation"
-                  className={s.promptSendBtn}
-                >
-                  {chatLoading ? <Spinner size={12} /> : <IconSend />}
-                </button>
+                {!ideaLocked && (
+                  <button
+                    type="button"
+                    onClick={handleSubmitIdea}
+                    disabled={chatLoading || !idea.trim()}
+                    title="Start conversation"
+                    className={s.promptSendBtn}
+                  >
+                    {chatLoading ? <Spinner size={12} /> : <IconSend />}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -795,7 +925,11 @@ export default function Home() {
             </div>
 
             {/* Run All */}
-            <div className={contextReady && !genLoading ? s.btnRunAllSpotlight : ""}>
+            <div
+              className={
+                contextReady && !genLoading ? s.btnRunAllSpotlight : ""
+              }
+            >
               <button
                 type="button"
                 onClick={() => handleGenerate("all")}
@@ -812,7 +946,9 @@ export default function Home() {
                 )}
               </button>
               {contextReady && !genLoading && (
-                <p className={s.btnRunAllHint}>Ready — click to generate all docs</p>
+                <p className={s.btnRunAllHint}>
+                  Ready — click to generate all docs
+                </p>
               )}
             </div>
 
@@ -890,8 +1026,8 @@ export default function Home() {
 
           {/* ── Center: Doc Viewer ── */}
           {(() => {
-            const diagramDocs = docs.filter(
-              (d) => DIAGRAM_AGENTS.includes(d.agent),
+            const diagramDocs = docs.filter((d) =>
+              DIAGRAM_AGENTS.includes(d.agent),
             );
             const activeDiagram =
               diagramDocs.find((d) => d.agent === selectedDoc?.agent) ??
@@ -910,21 +1046,10 @@ export default function Home() {
                 {outputMode === "diagrams" ? (
                   diagramDocs.length > 0 ? (
                     <>
-                      <div className={s.docTabs}>
-                        {diagramDocs.map((doc) => (
-                          <button
-                            type="button"
-                            key={doc.agent}
-                            onClick={() => setSelectedDoc(doc)}
-                            className={`${s.docTab} ${activeDiagram?.agent === doc.agent ? s.docTabActive : ""}`}
-                          >
-                            {doc.agent.toUpperCase()}
-                          </button>
-                        ))}
-                      </div>
                       {activeDiagram && (
                         <div className={s.diagramPanel}>
-                          {activeDiagram.nodes && activeDiagram.nodes.length > 0 ? (
+                          {activeDiagram.nodes &&
+                          activeDiagram.nodes.length > 0 ? (
                             <ArchitectureDiagram
                               key={activeDiagram.agent}
                               nodes={activeDiagram.nodes}
@@ -935,7 +1060,10 @@ export default function Home() {
                               <div className={s.emptyIcon}>⬡</div>
                               <div>
                                 <p className={s.emptyTitle}>No diagram yet</p>
-                                <p className={s.emptyDesc}>Regenerate {activeDiagram.agent} to produce the visual diagram</p>
+                                <p className={s.emptyDesc}>
+                                  Regenerate {activeDiagram.agent} to produce
+                                  the visual diagram
+                                </p>
                               </div>
                             </div>
                           )}
@@ -956,18 +1084,6 @@ export default function Home() {
                   )
                 ) : docOnlyDocs.length > 0 ? (
                   <>
-                    <div className={s.docTabs}>
-                      {docOnlyDocs.map((doc) => (
-                        <button
-                          type="button"
-                          key={doc.agent}
-                          onClick={() => setSelectedDoc(doc)}
-                          className={`${s.docTab} ${activeDoc?.agent === doc.agent ? s.docTabActive : ""}`}
-                        >
-                          {doc.agent.toUpperCase()}
-                        </button>
-                      ))}
-                    </div>
                     {activeDoc && (
                       <div className={s.docContent}>
                         <div className={s.docHeader}>
@@ -984,7 +1100,9 @@ export default function Home() {
                           </button>
                         </div>
                         <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeDoc.markdown}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {activeDoc.markdown}
+                          </ReactMarkdown>
                         </div>
                       </div>
                     )}
@@ -1005,7 +1123,9 @@ export default function Home() {
           })()}
 
           {/* ── Right Panel: AI Assistant ── */}
-          <div className={`${s.chatPanel} ${chatOpen ? "" : s.chatPanelCollapsed}`}>
+          <div
+            className={`${s.chatPanel} ${chatOpen ? "" : s.chatPanelCollapsed}`}
+          >
             <div className={s.chatHeader}>
               <button
                 type="button"
@@ -1013,18 +1133,29 @@ export default function Home() {
                 onClick={() => setChatOpen((v) => !v)}
                 title={chatOpen ? "Collapse chat" : "Expand chat"}
               >
-                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"
-                  className={chatOpen ? s.chevronOpen : s.chevronClosed}>
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  width="12"
+                  height="12"
+                  className={chatOpen ? s.chevronOpen : s.chevronClosed}
+                >
                   <path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.749.749 0 111.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z" />
                 </svg>
               </button>
-              {chatOpen && <span className={s.chatHeaderLabel}>AI ASSISTANT</span>}
+              {chatOpen && (
+                <span className={s.chatHeaderLabel}>AI ASSISTANT</span>
+              )}
               {chatOpen && (
                 <div className={s.chatHeaderRight}>
                   {activeCount > 0 && (
-                    <span className={s.chatActiveBadge}>{activeCount} Active</span>
+                    <span className={s.chatActiveBadge}>
+                      {activeCount} Active
+                    </span>
                   )}
-                  <div className={`${s.chatStatusDot} ${projectId !== null ? s.chatStatusDotActive : ""}`} />
+                  <div
+                    className={`${s.chatStatusDot} ${projectId !== null ? s.chatStatusDotActive : ""}`}
+                  />
                 </div>
               )}
             </div>
@@ -1053,10 +1184,16 @@ export default function Home() {
                       {msg.role === "assistant" && (
                         <div className={s.chatAvatar}>D</div>
                       )}
-                      <div className={msg.role === "user" ? s.msgUser : s.msgAssistant}>
+                      <div
+                        className={
+                          msg.role === "user" ? s.msgUser : s.msgAssistant
+                        }
+                      >
                         {msg.role === "assistant" ? (
                           <div className="prose prose-invert prose-xs max-w-none text-[11px] leading-[1.5] prose-p:my-1 prose-p:text-[11px] prose-li:my-0.5 prose-li:text-[11px] prose-headings:text-[13px] prose-headings:text-[#F4F6FE] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-code:text-[10px]">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
                           </div>
                         ) : (
                           msg.content
@@ -1064,16 +1201,24 @@ export default function Home() {
                       </div>
                     </div>
                   ))}
-                  {chatLoading && chatMessages[chatMessages.length - 1]?.role !== "assistant" && (
-                    <div className="flex justify-start">
-                      <div className={s.chatAvatar}>D</div>
-                      <div className={s.typingIndicator}>
-                        <span className={`${s.typingDot} animate-bounce [animation-delay:0ms]`} />
-                        <span className={`${s.typingDot} animate-bounce [animation-delay:300ms]`} />
-                        <span className={`${s.typingDot} animate-bounce [animation-delay:300ms]`} />
+                  {chatLoading &&
+                    chatMessages[chatMessages.length - 1]?.role !==
+                      "assistant" && (
+                      <div className="flex justify-start">
+                        <div className={s.chatAvatar}>D</div>
+                        <div className={s.typingIndicator}>
+                          <span
+                            className={`${s.typingDot} animate-bounce [animation-delay:0ms]`}
+                          />
+                          <span
+                            className={`${s.typingDot} animate-bounce [animation-delay:300ms]`}
+                          />
+                          <span
+                            className={`${s.typingDot} animate-bounce [animation-delay:300ms]`}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                   <div ref={chatEndRef} />
                 </div>
 
@@ -1081,7 +1226,11 @@ export default function Home() {
                   <input
                     type="text"
                     className={s.chatInput}
-                    placeholder={projectId === null ? "Select a project first…" : "Message DocGenix…"}
+                    placeholder={
+                      projectId === null
+                        ? "Select a project first…"
+                        : "Message DocGenix…"
+                    }
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleChat()}
@@ -1090,7 +1239,9 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleChat}
-                    disabled={projectId === null || chatLoading || !chatInput.trim()}
+                    disabled={
+                      projectId === null || chatLoading || !chatInput.trim()
+                    }
                     title="Send"
                     className={s.btnChatSend}
                   >

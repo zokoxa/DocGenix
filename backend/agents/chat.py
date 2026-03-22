@@ -4,24 +4,29 @@ Also provides context extraction and readiness checking.
 """
 
 from langchain_ollama import ChatOllama
+from langchain_core.tools import tool
+from ddgs import DDGS
 
 from agents.base import OLLAMA_BASE_URL, _ollama_kwargs
 from agents.project_overview import make_agent as make_overview_agent
 
-CHAT_MODEL = "llama3.2:3b"
+CHAT_MODEL = "qwen3.5:latest"
 EXTRACT_MODEL = "llama3.2:3b"
 REQUIRED_FIELDS = ["platform", "features", "tech_stack", "audience"]
 
 CHAT_SYSTEM_PROMPT = """You are a helpful assistant for a software project planning tool.
 
 ## Rules
-- Keep it short and concise, and use bullet points.
+- Keep it VERY short and concise, and use bullet points ONLY, NOT NUMBERED BULLET POINTS.
 - NEVER invent, assume, or hallucinate details the user has not stated. Only reference what the user has actually said.
-- Ask 1-2 short questions at a time. Do NOT list many questions at once.
-- Keep responses brief (3-5 sentences max).
+- Ask 1 short questions at a time. Do NOT list many questions at once.
+- Keep responses VERY brief (1-2 sentences MAX).
+- 10 questions MAX.
 - Do NOT name or brand the project unless the user has.
-- Do NOT make assumptions about the tech stack or target audience unless the user has explicitly stated them.
-- NEVER small talk. Focus only on gathering project details and refining the idea.
+- ONLY ASK QUESTIONS.
+- FOCUS on gathering details about these fields: platform, features, tech stack, audience.
+- DO NOT OFFER TO GENERATE DOCUMENTS OR CODE.
+- You have a web_search tool. Use it when the user asks about technologies, frameworks, or best practices.
 
 ## Already Gathered Context
 {context}
@@ -61,6 +66,24 @@ Conversation:
 Extracted details:"""
 
 
+@tool
+def web_search(query: str) -> str:
+    """Search the web for up-to-date information about technologies, frameworks, or best practices."""
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=4))
+        if not results:
+            return "No results found."
+        return "\n\n".join(
+            f"**{r['title']}**\n{r['body']}" for r in results
+        )
+    except Exception as e:
+        return f"Search failed: {e}"
+
+
+TOOLS = [web_search]
+
+
 def build_chat_messages(
     idea: str, documents: list[dict], history: list[dict], context: str | None = None
 ) -> list[dict]:
@@ -80,8 +103,41 @@ def build_chat_messages(
 
 
 def make_chat_llm() -> ChatOllama:
-    """Return the ChatOllama instance for conversation."""
+    """Return the ChatOllama instance with tools bound."""
+    return ChatOllama(**_ollama_kwargs(CHAT_MODEL)).bind_tools(TOOLS)
+
+
+def make_chat_llm_plain() -> ChatOllama:
+    """Return the ChatOllama instance without tools (for streaming final response)."""
     return ChatOllama(**_ollama_kwargs(CHAT_MODEL))
+
+
+async def run_tool_calls(response) -> list[dict]:
+    """Execute any tool calls in the response and return tool result messages."""
+    tool_map = {t.name: t for t in TOOLS}
+    result_messages = []
+
+    for tool_call in response.tool_calls:
+        name = tool_call["name"]
+        args = tool_call["args"]
+        print(f"  [Chat] tool call: {name}({args})", flush=True)
+
+        if name in tool_map:
+            try:
+                result = await tool_map[name].ainvoke(args)
+            except Exception as e:
+                result = f"Tool error: {e}"
+        else:
+            result = f"Unknown tool: {name}"
+
+        result_messages.append({
+            "role": "tool",
+            "name": name,
+            "tool_call_id": tool_call["id"],
+            "content": str(result),
+        })
+
+    return result_messages
 
 
 def parse_context(raw: str) -> dict[str, str]:
