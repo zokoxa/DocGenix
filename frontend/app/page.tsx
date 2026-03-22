@@ -106,6 +106,19 @@ function IconPlus() {
   );
 }
 
+function IconSidebarToggle({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" width="18" height="18" aria-hidden="true">
+      <rect x="1.75" y="3" width="16.5" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      {collapsed ? (
+        <path d="M7 4v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      ) : (
+        <path d="M13 4v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      )}
+    </svg>
+  );
+}
+
 export default function Home() {
   const [idea, setIdea] = useState("");
   const [projectId, setProjectId] = useState<number | null>(null);
@@ -129,6 +142,7 @@ export default function Home() {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   function extractProjectName(markdown: string): string {
     // Find name after "Project Name Suggestion" label — strips **, [], and descriptions
@@ -493,28 +507,69 @@ export default function Home() {
   return (
     <div className={s.appShell}>
       {/* ── Sidebar ── */}
-      <aside className={s.sidebar}>
+      <aside
+        className={`${s.sidebar} ${isSidebarCollapsed ? s.sidebarCollapsed : ""}`}
+      >
         <div className={s.sidebarBrand}>
           <div className={s.brandLogo}>D</div>
-          <div>
+          <div className={s.brandText}>
             <div className={s.brandName}>DocGenix</div>
             <div className={s.brandSubtitle}>AI WORKSPACE</div>
           </div>
+          {!isSidebarCollapsed && (
+            <button
+              type="button"
+              className={s.sidebarCollapseBtn}
+              onClick={() => setIsSidebarCollapsed((v) => !v)}
+              aria-label="Collapse side panel"
+              title="Collapse side panel"
+            >
+              <IconSidebarToggle collapsed={false} />
+            </button>
+          )}
         </div>
 
-        <nav className={s.sidebarNav}>
-          <button
-            type="button"
-            onClick={handleNewProject}
-            className={s.btnNewProject}
-          >
-            <IconPlus />
-            New Project
-          </button>
-        </nav>
+        {isSidebarCollapsed ? (
+          <div className={s.collapsedIconStack}>
+            <button
+              type="button"
+              className={s.sidebarCollapseBtn}
+              onClick={() => setIsSidebarCollapsed((v) => !v)}
+              aria-label="Expand side panel"
+              title="Expand side panel"
+            >
+              <IconSidebarToggle collapsed />
+            </button>
+            <button
+              type="button"
+              onClick={handleNewProject}
+              className={`${s.btnNewProject} ${s.btnNewProjectCollapsed}`}
+              aria-label="New Project"
+              title="New Project"
+            >
+              <IconPlus />
+            </button>
+          </div>
+        ) : (
+          <nav className={s.sidebarNav}>
+            <button
+              type="button"
+              onClick={handleNewProject}
+              className={s.btnNewProject}
+              aria-label="New Project"
+              title="New Project"
+            >
+              <IconPlus />
+              <span className={s.sidebarButtonText}>New Project</span>
+            </button>
+          </nav>
+        )}
 
         {projects.length > 0 && (
-          <div className={s.recentSection}>
+          <div
+            className={`${s.recentSection} ${isSidebarCollapsed ? s.recentSectionCollapsed : ""}`}
+            aria-hidden={isSidebarCollapsed}
+          >
             <div className={s.recentLabel}>RECENT</div>
             <div className={s.projectList}>
               {[...projects]

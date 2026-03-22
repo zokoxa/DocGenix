@@ -18,6 +18,12 @@
   background: #0A0E13;
   border-right: 1px solid #1E293B;
   box-shadow: 25px 0 50px -12px rgba(0, 0, 0, 0.25);
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.sidebarCollapsed {
+  width: 88px;
+  box-shadow: 10px 0 24px -16px rgba(0, 0, 0, 0.2);
 }
 
 .sidebarBrand {
@@ -25,6 +31,17 @@
   align-items: center;
   gap: 12px;
   padding: 20px 24px;
+  transition: padding 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), gap 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: relative;
+  width: 100%;
+}
+
+.brandText {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  max-width: 160px;
+  transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .brandLogo {
@@ -39,6 +56,8 @@
   color: #000;
   background: linear-gradient(135deg, #85ADFF, #C180FF);
   border-radius: 2px;
+  overflow: hidden;
+  transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .brandName {
@@ -55,6 +74,36 @@
   font-size: 10px;
   line-height: 20px;
   letter-spacing: 1px;
+}
+
+.sidebarCollapseBtn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #D6D2CC;
+  cursor: pointer;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebarCollapseBtn:hover {
+  opacity: 0.9;
+  color: #F4F6FE;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sidebarCollapseBtn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .btnNewProject {
@@ -76,11 +125,79 @@
 }
 .btnNewProject:hover { opacity: 0.8; }
 
+.btnNewProject svg {
+  display: block;
+}
+
+.sidebarButtonText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  display: inline-block;
+  transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 .sidebarNav {
   padding: 0 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.collapsedIconStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 16px;
+  gap: 14px;
+}
+
+.sidebarCollapsed .sidebarBrand {
+  justify-content: flex-start;
+  align-items: center;
+  padding: 16px 0 0;
+  gap: 0;
+}
+
+.sidebarCollapsed .brandLogo {
+  opacity: 0;
+  transform: translateX(-48px);
+  position: absolute;
+  left: 16px;
+  pointer-events: none;
+}
+
+.sidebarCollapsed .brandText {
+  opacity: 0;
+  transform: translateX(-8px);
+}
+
+.sidebarCollapsed .sidebarNav {
+  padding: 0;
+}
+
+.btnNewProjectCollapsed {
+  display: inline-flex;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 4px;
+  margin: 0 auto;
+  gap: 0;
+  align-items: center;
+}
+
+.btnNewProjectCollapsed svg {
+  width: 18px;
+  height: 18px;
+  line-height: 0;
+}
+
+.sidebarCollapsed .sidebarButtonText {
+  opacity: 0;
+  transform: translateX(-8px);
 }
 
 .navItem {
@@ -113,6 +230,21 @@
   margin-top: 20px;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  max-width: 100%;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), max-width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), margin 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), padding 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.recentSectionCollapsed {
+  opacity: 0;
+  max-width: 0;
+  margin-top: 0;
+  padding-left: 0;
+  padding-right: 0;
+  transform: translateX(-12px);
+  pointer-events: none;
 }
 
 .recentLabel {
