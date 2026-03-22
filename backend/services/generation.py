@@ -31,13 +31,13 @@ MAX_ITERATIONS = 2  # max critic revision rounds
 
 
 def _build_prompt(idea: str, context: str | None = None) -> str:
-    parts = [
-        "Produce your documentation artifact for this software project idea:\n",
-        idea,
-    ]
+    parts = []
     if context:
-        parts.append("\n\n## Project Details (from user interview)\n")
+        parts.append("## Project Context (from user interview)\n")
         parts.append(context)
+        parts.append("\n\n---\n")
+    parts.append("Produce your documentation artifact for this software project idea:\n")
+    parts.append(idea)
     parts.append("\n\nFollow your instructions exactly and return only your document.")
     return "\n".join(parts)
 
