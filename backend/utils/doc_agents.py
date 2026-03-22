@@ -1,6 +1,6 @@
 """
-Eight specialized documentation agents.
-Each produces ONE markdown document for a new software project idea.
+Specialized documentation agents.
+Each produces ONE document for a new software project idea.
 """
 
 from agents.base import BaseAgent
@@ -20,6 +20,18 @@ def make_doc_agents() -> list[BaseAgent]:
         _project_overview(),
         _requirements(),
         _user_stories(),
+        _architecture(),
+        _api_spec(),
+        _data_model(),
+        _devops(),
+        _testing_strategy(),
+    ]
+
+
+def make_doc_agents_core() -> list[BaseAgent]:
+    """Return 6 core documentation agents (excludes Requirements and User Stories)."""
+    return [
+        _project_overview(),
         _architecture(),
         _api_spec(),
         _data_model(),

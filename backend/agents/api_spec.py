@@ -17,32 +17,58 @@ Instructions:
 2. Design endpoints around resources, not actions (REST principles).
 3. Include realistic example request/response bodies.
 4. Be explicit about which endpoints require authentication.
-5. Return ONLY your document in this exact structure:
+5. Use PLAIN TEXT ONLY. No markdown headers (##, ###), no bold (**), no backtick code fences.
+   Show JSON examples as plain indented text.
+6. Return ONLY your document in this exact structure:
 
-## API Specification
+API SPECIFICATION
+=================
 
-### Authentication
-[Auth method - JWT, OAuth, API key - and how to pass it]
+Authentication
+  Method: [JWT / OAuth 2.0 / API Key]
+  How to pass: [Authorization: Bearer <token> / X-API-Key header / etc.]
 
-### Base URL & Versioning
-`/api/v1/`
+Base URL & Versioning
+  Base URL: /api/v1/
+  Strategy: [URL versioning / header versioning]
 
-### Error Format
-```json
-{ "error": { "code": "...", "message": "...", "details": {} } }
-```
+Error Format
+  {
+    "error": {
+      "code": "ERROR_CODE",
+      "message": "Human readable message",
+      "details": {}
+    }
+  }
 
-### Endpoints
+Endpoints
 
-#### [Resource Name]
-**GET /api/v1/[resource]**
-Description: [what this does]
-Auth required: Yes/No
-Query params: `[param]`: [type] - [description]
-Response 200:
-```json
-[example]
-```"""
+  [Resource Name]
+
+  GET /api/v1/[resource]
+    Description: [what this does]
+    Auth required: Yes / No
+    Query params:
+      [param]: [type] — [description]
+    Response 200:
+      {
+        "[field]": "[value]"
+      }
+
+  POST /api/v1/[resource]
+    Description: [what this does]
+    Auth required: Yes / No
+    Request body:
+      {
+        "[field]": "[value]"
+      }
+    Response 201:
+      {
+        "id": "[uuid]",
+        "[field]": "[value]"
+      }
+
+  (Continue this format for every endpoint and resource)"""
 
 
 def make_agent() -> BaseAgent:

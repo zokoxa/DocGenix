@@ -20,13 +20,14 @@ Instructions:
 4. If a document is good enough, say "APPROVED" for that document.
 5. Focus on substantive issues, not formatting.
 
-Return your review in this EXACT format (one section per document):
+Return your review in this EXACT format (one section per document).
+Use PLAIN TEXT ONLY. No markdown headers (###), no bold (**).
 
-### [Agent Name]
-**Status**: NEEDS_REVISION | APPROVED
-**Issues**:
-- [specific issue 1 with actionable fix]
-- [specific issue 2 with actionable fix]
+[Agent Name]
+  Status: NEEDS_REVISION | APPROVED
+  Issues:
+    - [specific issue 1 with actionable fix]
+    - [specific issue 2 with actionable fix]
 
 Repeat for every document reviewed. Every agent must have a section."""
 

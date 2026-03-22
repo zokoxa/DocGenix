@@ -16,40 +16,70 @@ Focus areas:
 Instructions:
 1. You may use web_search to find current DevOps best practices.
 2. Give concrete tool recommendations, not generic descriptions.
-3. Provide a pipeline stage table showing what happens at each step.
-4. Address rollback strategy explicitly.
+3. Address rollback strategy explicitly.
+4. Use PLAIN TEXT ONLY. No markdown tables (no | pipes |), no bold (**), no ## headers.
 5. Return ONLY your document in this exact structure:
 
-## DevOps & Deployment Strategy
+DEVOPS & DEPLOYMENT STRATEGY
+=============================
 
-### CI/CD Platform
-[Choice and rationale]
+CI/CD Platform
+  Choice: [Platform name]
+  Rationale: [Why this platform]
 
-### Pipeline Stages
-| Stage | Trigger | Steps | Failure Action |
-|-------|---------|-------|----------------|
+Pipeline Stages
+  1. Lint
+     Trigger: [PR opened / push]
+     Steps: [specific tools and commands]
+     On failure: [block merge / notify]
 
-### Containerization
-[Docker strategy, base images, multi-stage builds]
+  2. Test
+     Trigger: [after lint]
+     Steps: [specific tools and commands]
+     On failure: [block merge / notify]
 
-### Infrastructure
-[Cloud provider, key managed services, IaC approach]
+  3. Build
+     Trigger: [after test]
+     Steps: [specific tools and commands]
+     On failure: [notify team]
 
-### Environment Strategy
-| Environment | Purpose | Deploy Trigger |
-|-------------|---------|----------------|
+  4. Deploy
+     Trigger: [merge to main / tag]
+     Steps: [specific tools and commands]
+     On failure: [auto rollback / notify]
 
-### Deployment Strategy
-[Rolling/blue-green/canary - with rationale]
+Containerization
+  Strategy: [multi-stage / single-stage]
+  Frontend image: [base image and rationale]
+  Backend image: [base image and rationale]
+  Registry: [Docker Hub / ECR / GCR]
 
-### Secrets & Config Management
-[How secrets are stored and injected]
+Infrastructure
+  Cloud provider: [choice and rationale]
+  Key services: [list services and their roles]
+  IaC tool: [Terraform / Pulumi / CDK]
 
-### Monitoring & Alerting
-[Key metrics, tools, alerting thresholds]
+Environment Strategy
+  Development  — [purpose] — Deploy trigger: [manual / PR merge]
+  Staging      — [purpose] — Deploy trigger: [merge to main]
+  Production   — [purpose] — Deploy trigger: [tagged release]
 
-### Rollback Strategy
-[How to revert a bad deployment]"""
+Deployment Strategy
+  Method: [Rolling / Blue-Green / Canary]
+  Rationale: [Why this method]
+  Rollout steps: [describe the process]
+
+Secrets & Config Management
+  Tool: [choice and rationale]
+  Approach: [how secrets are stored and injected into containers]
+
+Monitoring & Alerting
+  Metrics tool: [choice]
+  Logging tool: [choice]
+  Key alerts: [list critical thresholds]
+
+Rollback Strategy
+  [Step-by-step instructions to revert a bad deployment]"""
 
 
 def make_agent() -> BaseAgent:

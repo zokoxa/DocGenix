@@ -14,37 +14,19 @@ CHAT_MODEL = MODEL
 EXTRACT_MODEL = MODEL
 REQUIRED_FIELDS = ["project_name", "platform", "features", "tech_stack", "audience"]
 
-CHAT_SYSTEM_PROMPT = """You are a helpful assistant for a software project planning tool.
+CHAT_SYSTEM_PROMPT = """You are DocGenix, a friendly assistant that helps users plan software projects.
 
-## Rules
-- NEVER invent, assume, or hallucinate details the user has not stated. Only reference what the user has actually said.
-- Ask 1 question at a time.
-- ONLY ASK QUESTIONS.
-- FOCUS on gathering details about these fields: project name, platform, features, tech stack, audience.
-- DO NOT OFFER TO GENERATE DOCUMENTS OR CODE.
-- KEEP RESPONSES SHORT AND CONCISE.
-- You have a web_search tool. Use it when the user asks about technologies, frameworks, or best practices.
-- When the user asks to change or update any field (name, features, tech stack, etc.), acknowledge the change and confirm the new value.
+Your only job is to chat with the user and gather their project details. The actual documentation is generated automatically by specialized agents — you must NEVER write documentation, specs, schemas, plans, or code yourself.
 
-## Already Gathered Context
-{context}
+Rules:
+- Keep every response to 1-3 short sentences maximum.
+- Use plain text only. No markdown, no tables, no bullet lists, no emoji, no LaTeX, no ASCII art.
+- Ask one question at a time to learn about: project name, platform, key features, tech stack, and target audience.
+- If the user volunteers multiple details at once, acknowledge them and ask about whatever is still missing.
+- You may offer brief opinions or suggestions if asked, but stay conversational.
+- Never generate documentation, code, schemas, or implementation plans — just say the doc agents will handle that.
 
-## Your Role
-When the project is new and has few or no documents, interview the user to gather details about these fields:
-1. Project name
-2. Target platform (web, mobile, desktop)
-3. Key features
-4. Tech stack preferences
-5. Target audience
-
-IMPORTANT: If a field in "Already Gathered Context" above is already known (not "unknown"), do NOT ask about it again. Only ask about fields that are still "unknown". If all fields are known, skip the interview entirely and help the user refine their project or answer questions.
-
-When documents have already been generated, help the user understand and refine them.
-
-## Project Idea
-{idea}
-
-## Project Documents
+Current project documents (for reference only):
 {documents}
 """
 
@@ -94,33 +76,23 @@ def build_chat_messages(
     idea: str, documents: list[dict], history: list[dict], context: str | None = None
 ) -> list[dict]:
     """Assemble the full message list for the chat LLM."""
-    # Truncate each document to avoid bloating the context window.
-    # The chat LLM only needs enough to answer questions — not the full text.
     snippets = []
     for d in documents:
         md = d["markdown"]
         snippet = md[:_DOC_SNIPPET_CHARS] + ("…" if len(md) > _DOC_SNIPPET_CHARS else "")
-        snippets.append(f"### {d['agent_name']}\n{snippet}")
+        snippets.append(f"{d['agent_name']}\n{snippet}")
     doc_context = "\n\n---\n\n".join(snippets)
     system_prompt = CHAT_SYSTEM_PROMPT.format(
-        idea=idea,
         documents=doc_context or "No documents generated yet.",
-        context=context or "No context gathered yet.",
     )
     messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
         messages.append({"role": msg["role"], "content": msg["content"]})
-
-    # Re-inject a compact rule reminder as the last system turn so it stays
-    # near the top of the model's attention even with long conversation history.
-    rule_reminder = (
-        "[REMINDER] Rules: Ask only 1 question at a time. "
-        "Never invent project details. "
-        "Do not offer to generate documents or code. "
-        "Keep responses short. "
-        "If the user updates a field (name, features, tech stack, etc.), acknowledge the new value."
-    )
-    messages.append({"role": "system", "content": rule_reminder})
+    messages.append({"role": "system", "content": (
+        "Reminder: Reply in plain text only, 1-3 sentences max. "
+        "Do NOT generate any documentation, code, schemas, or plans. "
+        "Just chat and gather project details."
+    )})
     return messages
 
 
