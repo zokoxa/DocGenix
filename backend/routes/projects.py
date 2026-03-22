@@ -4,7 +4,7 @@ import zipfile
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, Response
 
-from models.database import get_projects, get_chat_history, get_documents, get_document_by_id, create_project
+from models.database import get_projects, get_chat_history, get_documents, get_document_by_id, create_project, delete_project
 
 router = APIRouter()
 
@@ -18,6 +18,12 @@ async def list_projects():
 async def new_project(body: dict):
     project_id = await create_project(body["idea"])
     return {"project_id": project_id}
+
+
+@router.delete("/projects/{project_id}")
+async def remove_project(project_id: int):
+    await delete_project(project_id)
+    return {"ok": True}
 
 
 @router.get("/projects/{project_id}/chat")

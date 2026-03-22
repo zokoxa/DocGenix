@@ -130,6 +130,21 @@
   gap: 2px;
 }
 
+.projectRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.projectRow .btnDeleteProject {
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.projectRow:hover .btnDeleteProject {
+  opacity: 1;
+}
+
 .projectItem {
   width: 100%;
   text-align: left;
@@ -794,6 +809,24 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.btnDeleteProject {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btnDeleteProject:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
 }
 
 .chatActiveBadge {

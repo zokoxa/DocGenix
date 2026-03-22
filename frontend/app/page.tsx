@@ -469,6 +469,12 @@ export default function Home() {
     setActiveAgents(new Set());
   }
 
+  async function handleDeleteProject(id: number) {
+    await fetch(`${API_URL}/projects/${id}`, { method: "DELETE" });
+    if (projectId === id) handleNewProject();
+    fetchProjects();
+  }
+
   const completedCount = docs.length;
   const totalAgents = AGENTS.length;
   const activeCount = activeAgents.size;
@@ -528,16 +534,27 @@ export default function Home() {
                 })
                 .slice(0, 8)
                 .map((proj) => (
-                  <button
-                    type="button"
-                    key={proj.id}
-                    onClick={() => loadProject(proj.id)}
-                    className={`${s.projectItem} ${projectId === proj.id ? s.projectItemActive : ""}`}
-                    title={proj.idea}
-                  >
-                    <span className={s.projectId}>#{proj.id}</span>
-                    {projectNames[proj.id] || proj.idea}
-                  </button>
+                  <div key={proj.id} className={s.projectRow}>
+                    <button
+                      type="button"
+                      onClick={() => loadProject(proj.id)}
+                      className={`${s.projectItem} ${projectId === proj.id ? s.projectItemActive : ""}`}
+                      title={proj.idea}
+                    >
+                      <span className={s.projectId}>#{proj.id}</span>
+                      {projectNames[proj.id] || proj.idea}
+                    </button>
+                    <button
+                      type="button"
+                      className={s.btnDeleteProject}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteProject(proj.id); }}
+                      title="Delete project"
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12">
+                        <path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM6.5 1.75V3h3V1.75a.25.25 0 00-.25-.25h-2.5a.25.25 0 00-.25.25zM4.997 6.178a.75.75 0 10-1.493.144l.684 7.084A1.75 1.75 0 005.926 15h4.148a1.75 1.75 0 001.738-1.594l.684-7.084a.75.75 0 00-1.493-.144L10.32 13.23a.25.25 0 01-.249.228H5.926a.25.25 0 01-.248-.228L4.997 6.178z" />
+                      </svg>
+                    </button>
+                  </div>
                 ))}
             </div>
           </div>
