@@ -26,9 +26,22 @@ GRAPH_AGENTS = {ARCH_AGENT_NAME, DATA_MODEL_AGENT_NAME}
 MAX_ITERATIONS = 2  # max critic revision rounds
 
 
+def _extract_project_name(context: str) -> str | None:
+    """Pull project_name out of the key-value context block, if present."""
+    for line in context.splitlines():
+        if line.startswith("project_name:"):
+            value = line.partition(":")[2].strip()
+            if value and value.lower() != "unknown":
+                return value
+    return None
+
+
 def _build_prompt(idea: str, context: str | None = None) -> str:
     parts = []
     if context:
+        name = _extract_project_name(context)
+        if name:
+            parts.append(f"## Project Name\n{name}\n")
         parts.append("## Project Context (from user interview)\n")
         parts.append(context)
         parts.append("\n\n---\n")
@@ -391,7 +404,7 @@ async def run_generation(idea: str, agent_name: str, project_id: int | None, age
                     break
 
                 pending_names = [a.name for a in pending]
-                yield {"type": "critic_start", "iteration": iteration + 1}
+                yield {"type": "critic_start", "iteration": iteration + 1, "reviewing": pending_names}
 
                 # Build prompt: send all docs for context, focus on pending targets
                 critic_prompt = _build_critic_prompt(
@@ -466,10 +479,17 @@ async def run_generation(idea: str, agent_name: str, project_id: int | None, age
             yield {"type": "critic_error", "message": str(e)}
 
     # ── Graph extraction via regex (instant, no LLM call) ──
-    # get_documents returns oldest-first; keep only the latest doc per agent
+    # Only extract graphs for agents that ran in this generation, not all DB docs
+    graph_targets = {a.name for a in targets} & GRAPH_AGENTS
+    if not graph_targets:
+        yield {"type": "done"}
+        return
+
     db_docs = await get_documents(project_id)
     latest_docs = {doc["agent_name"]: doc for doc in db_docs}  # last write wins
     for doc in latest_docs.values():
+        if doc["agent_name"] not in graph_targets:
+            continue
         if doc["agent_name"] == ARCH_AGENT_NAME:
             graph_data = _parse_arch_graph(doc["markdown"])
             await update_document_graph(doc["id"], json.dumps(graph_data))

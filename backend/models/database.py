@@ -71,6 +71,15 @@ async def save_document(project_id: int, agent_name: str, markdown: str, arch_gr
         return cursor.lastrowid
 
 
+async def update_document_markdown(doc_id: int, markdown: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE documents SET markdown = ? WHERE id = ?",
+            (markdown, doc_id),
+        )
+        await db.commit()
+
+
 async def update_document_graph(doc_id: int, arch_graph: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(

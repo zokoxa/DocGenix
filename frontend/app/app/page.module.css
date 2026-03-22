@@ -845,6 +845,32 @@
   color: #F4F6FE;
 }
 
+.btnDiagramRegenerate {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 10;
+  background: transparent;
+  border: 1px solid #44484E;
+  color: #85ADFF;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btnDiagramRegenerate:hover {
+  background: rgba(133, 173, 255, 0.1);
+}
+
+.btnDiagramRegenerate:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .docTabs {
   display: flex;
   align-items: flex-end;
@@ -884,6 +910,31 @@
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 1rem;
+}
+
+.docHeaderActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.docEditTextarea {
+  width: 100%;
+  min-height: 600px;
+  background: #161B22;
+  border: 1px solid #44484E;
+  border-radius: 6px;
+  color: #A8ABB2;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 16px;
+  resize: vertical;
+  outline: none;
+}
+
+.docEditTextarea:focus {
+  border-color: #85ADFF;
 }
 
 .btnRegenerate {

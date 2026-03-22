@@ -4,7 +4,7 @@ import zipfile
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, Response
 
-from models.database import get_projects, get_chat_history, get_documents, get_document_by_id, create_project, delete_project
+from models.database import get_projects, get_chat_history, get_documents, get_document_by_id, create_project, delete_project, update_document_markdown
 
 router = APIRouter()
 
@@ -54,6 +54,18 @@ async def export_project(project_id: int):
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename=project_{project_id}_docs.zip"},
     )
+
+
+@router.patch("/documents/{doc_id}")
+async def patch_document(doc_id: int, body: dict):
+    markdown = body.get("markdown")
+    if not isinstance(markdown, str):
+        raise HTTPException(status_code=400, detail="markdown field required")
+    doc = await get_document_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    await update_document_markdown(doc_id, markdown)
+    return {"ok": True}
 
 
 @router.get("/documents/{doc_id}/download/md")

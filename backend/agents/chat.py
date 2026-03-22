@@ -12,7 +12,7 @@ from agents.project_overview import make_agent as make_overview_agent
 
 CHAT_MODEL = "qwen3.5:latest"
 EXTRACT_MODEL = "llama3.2:3b"
-REQUIRED_FIELDS = ["platform", "features", "tech_stack", "audience"]
+REQUIRED_FIELDS = ["project_name", "platform", "features", "tech_stack", "audience"]
 
 CHAT_SYSTEM_PROMPT = """You are a helpful assistant for a software project planning tool.
 
@@ -20,20 +20,22 @@ CHAT_SYSTEM_PROMPT = """You are a helpful assistant for a software project plann
 - NEVER invent, assume, or hallucinate details the user has not stated. Only reference what the user has actually said.
 - Ask 1 question at a time.
 - ONLY ASK QUESTIONS.
-- FOCUS on gathering details about these fields: platform, features, tech stack, audience.
+- FOCUS on gathering details about these fields: project name, platform, features, tech stack, audience.
 - DO NOT OFFER TO GENERATE DOCUMENTS OR CODE.
 - KEEP RESPONSES SHORT AND CONCISE.
 - You have a web_search tool. Use it when the user asks about technologies, frameworks, or best practices.
+- When the user asks to change or update any field (name, features, tech stack, etc.), acknowledge the change and confirm the new value.
 
 ## Already Gathered Context
 {context}
 
 ## Your Role
 When the project is new and has few or no documents, interview the user to gather details about these fields:
-1. Target platform (web, mobile, desktop)
-2. Key features
-3. Tech stack preferences
-4. Target audience
+1. Project name
+2. Target platform (web, mobile, desktop)
+3. Key features
+4. Tech stack preferences
+5. Target audience
 
 IMPORTANT: If a field in "Already Gathered Context" above is already known (not "unknown"), do NOT ask about it again. Only ask about fields that are still "unknown". If all fields are known, skip the interview entirely and help the user refine their project or answer questions.
 
@@ -46,12 +48,16 @@ When documents have already been generated, help the user understand and refine 
 {documents}
 """
 
-EXTRACT_PROMPT = """Review this conversation about a software project and extract confirmed project details.
+EXTRACT_PROMPT = """Review this conversation about a software project and extract the most up-to-date confirmed project details.
 
-IMPORTANT: Only include details the user has explicitly stated. Use "unknown" for any topic not yet discussed.
+CRITICAL RULES:
+- Only include details the user has explicitly stated. Use "unknown" for any topic not yet discussed.
+- If the user has UPDATED or CORRECTED a field during the conversation, use the LATEST value — not the original.
+- If the user says "change X to Y" or "actually it's Y" or "rename it to Y", the new value is Y.
 
 You MUST respond in EXACTLY this format (keep the labels, replace the values):
 
+project_name: <the project name, or unknown>
 platform: <web, mobile, desktop, or unknown>
 features: <comma-separated list of features, or unknown>
 tech_stack: <languages/frameworks mentioned, or unknown>
@@ -81,13 +87,21 @@ def web_search(query: str) -> str:
 TOOLS = [web_search]
 
 
+_DOC_SNIPPET_CHARS = 800  # characters per document kept in the system prompt
+
+
 def build_chat_messages(
     idea: str, documents: list[dict], history: list[dict], context: str | None = None
 ) -> list[dict]:
     """Assemble the full message list for the chat LLM."""
-    doc_context = "\n\n---\n\n".join(
-        f"### {d['agent_name']}\n{d['markdown']}" for d in documents
-    )
+    # Truncate each document to avoid bloating the context window.
+    # The chat LLM only needs enough to answer questions — not the full text.
+    snippets = []
+    for d in documents:
+        md = d["markdown"]
+        snippet = md[:_DOC_SNIPPET_CHARS] + ("…" if len(md) > _DOC_SNIPPET_CHARS else "")
+        snippets.append(f"### {d['agent_name']}\n{snippet}")
+    doc_context = "\n\n---\n\n".join(snippets)
     system_prompt = CHAT_SYSTEM_PROMPT.format(
         idea=idea,
         documents=doc_context or "No documents generated yet.",
@@ -96,6 +110,17 @@ def build_chat_messages(
     messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
         messages.append({"role": msg["role"], "content": msg["content"]})
+
+    # Re-inject a compact rule reminder as the last system turn so it stays
+    # near the top of the model's attention even with long conversation history.
+    rule_reminder = (
+        "[REMINDER] Rules: Ask only 1 question at a time. "
+        "Never invent project details. "
+        "Do not offer to generate documents or code. "
+        "Keep responses short. "
+        "If the user updates a field (name, features, tech stack, etc.), acknowledge the new value."
+    )
+    messages.append({"role": "system", "content": rule_reminder})
     return messages
 
 

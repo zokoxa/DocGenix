@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -185,8 +185,10 @@ export default function Home() {
   const [selectedDoc, setSelectedDoc] = useState<GeneratedDoc | null>(null);
   const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
   const [criticStatus, setCriticStatus] = useState<string | null>(null);
-  const [currentIteration, setCurrentIteration] = useState(0);
-  const [maxIterations, setMaxIterations] = useState(0);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -215,7 +217,7 @@ export default function Home() {
   }, []);
   const [mounted, setMounted] = useState(false);
 
-  const [shareOpen, setShareOpen] = useState(false);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [recentIds, setRecentIds] = useState<number[]>([]);
   const [projectNames, setProjectNames] = useState<Record<number, string>>({});
@@ -457,7 +459,31 @@ export default function Home() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
+  // Reset edit mode when switching documents
+  useEffect(() => {
+    setIsEditing(false);
+    setEditContent("");
+  }, [selectedDoc?.agent]);
+
   if (!mounted) return null;
+
+  async function handleSaveEdit(doc: GeneratedDoc) {
+    if (!doc.doc_id) return;
+    setEditSaving(true);
+    try {
+      await fetch(`${API_URL}/documents/${doc.doc_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markdown: editContent }),
+      });
+      const updated = { ...doc, markdown: editContent };
+      setDocs((prev) => prev.map((d) => (d.doc_id === doc.doc_id ? updated : d)));
+      setSelectedDoc(updated);
+      setIsEditing(false);
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   async function handleGenerate(agent: string) {
     if (!idea.trim()) return;
@@ -467,8 +493,6 @@ export default function Home() {
     setContextReady(false);
     setActiveAgents(agent === "all" ? new Set(AGENTS) : new Set([agent]));
     setCriticStatus(null);
-    setCurrentIteration(0);
-    setMaxIterations(0);
 
     let currentProjId = myProjId;
 
@@ -531,8 +555,6 @@ export default function Home() {
               }
             } else if (data.type === "iteration") {
               if (projectIdRef.current === currentProjId) {
-                setCurrentIteration(data.iteration);
-                setMaxIterations(data.max_iterations);
                 if (data.revising) {
                   setCriticStatus(`Revising: ${data.revising.join(", ")}`);
                   setActiveAgents(new Set(data.revising));
@@ -540,7 +562,10 @@ export default function Home() {
               }
             } else if (data.type === "critic_start") {
               if (projectIdRef.current === currentProjId) {
-                setCriticStatus("Critic is reviewing all documents...");
+                const reviewing = data.reviewing?.length
+                  ? `Reviewing: ${data.reviewing.join(", ")}`
+                  : "Reviewing all documents...";
+                setCriticStatus(reviewing);
                 setActiveAgents(new Set());
               }
             } else if (data.type === "critic_result") {
@@ -987,7 +1012,7 @@ export default function Home() {
           <div className={s.inputPanel}>
             {/* System Prompt */}
             <div>
-              <div className={s.panelLabel}>SYSTEM PROMPT</div>
+              <div className={s.panelLabel}>PROJECT CONTEXT</div>
               <div className={s.promptWrapper}>
                 <textarea
                   className={`${s.promptTextarea} ${ideaLocked ? s.promptTextareaLocked : ""}`}
@@ -1070,11 +1095,6 @@ export default function Home() {
             {criticStatus && (
               <div className={s.criticStatus}>
                 <div className={s.criticLabel}>
-                  {currentIteration > 0 && maxIterations > 0 && (
-                    <span className={s.iterBadge}>
-                      Pass {currentIteration}/{maxIterations}
-                    </span>
-                  )}
                   <span>🔍 Critic</span>
                 </div>
                 <p className={s.criticMsg}>{criticStatus}</p>
@@ -1174,6 +1194,15 @@ export default function Home() {
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
                             )}
                           </button>
+                          <button
+                            type="button"
+                            className={s.btnDiagramRegenerate}
+                            onClick={() => handleGenerate(activeDiagram.agent)}
+                            disabled={genLoading}
+                            title={`Regenerate ${activeDiagram.agent}`}
+                          >
+                            ↻ Regenerate
+                          </button>
                           {activeDiagram.agent === "Data Model" &&
                           activeDiagram.er_nodes &&
                           activeDiagram.er_nodes.length > 0 ? (
@@ -1226,20 +1255,62 @@ export default function Home() {
                           <p className={s.docSubtitle}>
                             v1.0 · Generated by DocGenix AI
                           </p>
-                          <button
-                            className={s.btnRegenerate}
-                            onClick={() => handleGenerate(activeDoc.agent)}
-                            disabled={genLoading}
-                            title="Regenerate this document"
-                          >
-                            ↻ Regenerate
-                          </button>
+                          <div className={s.docHeaderActions}>
+                            {isEditing ? (
+                              <>
+                                <button
+                                  className={s.btnRegenerate}
+                                  onClick={() => handleSaveEdit(activeDoc)}
+                                  disabled={editSaving}
+                                  title="Save changes"
+                                >
+                                  {editSaving ? <Spinner size={12} /> : "✓ Save"}
+                                </button>
+                                <button
+                                  className={s.btnRegenerate}
+                                  onClick={() => setIsEditing(false)}
+                                  disabled={editSaving}
+                                  title="Cancel editing"
+                                >
+                                  ✕ Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  className={s.btnRegenerate}
+                                  onClick={() => { setEditContent(activeDoc.markdown); setIsEditing(true); }}
+                                  disabled={genLoading}
+                                  title="Edit this document"
+                                >
+                                  ✎ Edit
+                                </button>
+                                <button
+                                  className={s.btnRegenerate}
+                                  onClick={() => handleGenerate(activeDoc.agent)}
+                                  disabled={genLoading}
+                                  title="Regenerate this document"
+                                >
+                                  ↻ Regenerate
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {activeDoc.markdown}
-                          </ReactMarkdown>
-                        </div>
+                        {isEditing ? (
+                          <textarea
+                            className={s.docEditTextarea}
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            spellCheck={false}
+                          />
+                        ) : (
+                          <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {activeDoc.markdown}
+                            </ReactMarkdown>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
