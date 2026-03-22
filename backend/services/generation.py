@@ -325,6 +325,36 @@ async def _run_single_agent(agent, prompt: str, queue: asyncio.Queue, project_id
         await queue.put({"type": "error", "agent": agent.name, "message": str(e)})
 
 
+async def _extract_and_yield_graph(event: dict) -> dict | None:
+    """Given a 'result' event from a GRAPH_AGENT, extract the graph, persist it, and return a graph event."""
+    agent_name = event.get("agent")
+    markdown = event.get("markdown", "")
+    doc_id = event.get("doc_id")
+    if not doc_id:
+        return None
+    if agent_name == ARCH_AGENT_NAME:
+        graph_data = _parse_arch_graph(markdown)
+        await update_document_graph(doc_id, json.dumps(graph_data))
+        return {
+            "type": "graph",
+            "agent": ARCH_AGENT_NAME,
+            "doc_id": doc_id,
+            "nodes": graph_data.get("nodes", []),
+            "edges": graph_data.get("edges", []),
+        }
+    elif agent_name == DATA_MODEL_AGENT_NAME:
+        graph_data = _parse_er_graph(markdown)
+        await update_document_graph(doc_id, json.dumps(graph_data))
+        return {
+            "type": "graph",
+            "agent": DATA_MODEL_AGENT_NAME,
+            "doc_id": doc_id,
+            "er_nodes": graph_data.get("nodes", []),
+            "er_edges": graph_data.get("edges", []),
+        }
+    return None
+
+
 async def _collect_results(queue: asyncio.Queue, count: int) -> list[dict]:
     """Drain `count` events from the queue, returning them as a list."""
     events = []
@@ -373,6 +403,10 @@ async def run_generation(idea: str, agent_name: str, project_id: int | None, age
         event = await queue.get()
         yield event
         received += 1
+        if event.get("type") == "result" and event.get("agent") in GRAPH_AGENTS:
+            graph_event = await _extract_and_yield_graph(event)
+            if graph_event:
+                yield graph_event
 
     await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -464,6 +498,10 @@ async def run_generation(idea: str, agent_name: str, project_id: int | None, age
                     event = await rev_queue.get()
                     yield event
                     rev_received += 1
+                    if event.get("type") == "result" and event.get("agent") in GRAPH_AGENTS:
+                        graph_event = await _extract_and_yield_graph(event)
+                        if graph_event:
+                            yield graph_event
 
                 await asyncio.gather(*rev_tasks, return_exceptions=True)
 
@@ -477,38 +515,5 @@ async def run_generation(idea: str, agent_name: str, project_id: int | None, age
             import traceback
             traceback.print_exc()
             yield {"type": "critic_error", "message": str(e)}
-
-    # ── Graph extraction via regex (instant, no LLM call) ──
-    # Only extract graphs for agents that ran in this generation, not all DB docs
-    graph_targets = {a.name for a in targets} & GRAPH_AGENTS
-    if not graph_targets:
-        yield {"type": "done"}
-        return
-
-    db_docs = await get_documents(project_id)
-    latest_docs = {doc["agent_name"]: doc for doc in db_docs}  # last write wins
-    for doc in latest_docs.values():
-        if doc["agent_name"] not in graph_targets:
-            continue
-        if doc["agent_name"] == ARCH_AGENT_NAME:
-            graph_data = _parse_arch_graph(doc["markdown"])
-            await update_document_graph(doc["id"], json.dumps(graph_data))
-            yield {
-                "type": "graph",
-                "agent": ARCH_AGENT_NAME,
-                "doc_id": doc["id"],
-                "nodes": graph_data.get("nodes", []),
-                "edges": graph_data.get("edges", []),
-            }
-        elif doc["agent_name"] == DATA_MODEL_AGENT_NAME:
-            graph_data = _parse_er_graph(doc["markdown"])
-            await update_document_graph(doc["id"], json.dumps(graph_data))
-            yield {
-                "type": "graph",
-                "agent": DATA_MODEL_AGENT_NAME,
-                "doc_id": doc["id"],
-                "er_nodes": graph_data.get("nodes", []),
-                "er_edges": graph_data.get("edges", []),
-            }
 
     yield {"type": "done"}

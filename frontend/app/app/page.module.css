@@ -354,6 +354,8 @@
   border-bottom: 1px solid #1E293B;
   backdrop-filter: blur(12px);
   overflow: visible;
+  position: relative;
+  z-index: 30000;
 }
 
 .breadcrumbs {
