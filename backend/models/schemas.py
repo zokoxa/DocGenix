@@ -91,7 +91,7 @@ class EREdge(BaseModel):
     id: str
     source: str        # node id
     target: str        # node id
-    label: str         # e.g. "1:N", "M:N", "1:1"
+    label: Literal["1:1", "1:M", "M:M"]  # cardinality — only these 3 values
     source_label: str  # e.g. "1", "*"
     target_label: str  # e.g. "*", "1"
 

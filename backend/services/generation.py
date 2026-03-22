@@ -195,9 +195,10 @@ async def _collect_results(queue: asyncio.Queue, count: int) -> list[dict]:
     return events
 
 
-async def run_generation(idea: str, agent_name: str, project_id: int | None) -> AsyncGenerator[dict, None]:
+async def run_generation(idea: str, agent_name: str, project_id: int | None, agents=None, critic=None) -> AsyncGenerator[dict, None]:
     """Async generator yielding SSE event dicts for document generation with critic loop."""
-    agents = make_doc_agents()
+    if agents is None:
+        agents = make_doc_agents()
     agent_map = {a.name: a for a in agents}
 
     context = None
@@ -252,7 +253,8 @@ async def run_generation(idea: str, agent_name: str, project_id: int | None) -> 
     # ── Critic loop ──
     if len(current_docs) > 0:
         try:
-            critic = make_critic()
+            if critic is None:
+                critic = make_critic()
             approved: set[str] = set()
 
             for iteration in range(MAX_ITERATIONS):
