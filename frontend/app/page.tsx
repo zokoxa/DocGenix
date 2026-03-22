@@ -130,6 +130,9 @@ export default function Home() {
   const [genLoading, setGenLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<GeneratedDoc | null>(null);
   const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
+  const [criticStatus, setCriticStatus] = useState<string | null>(null);
+  const [currentIteration, setCurrentIteration] = useState(0);
+  const [maxIterations, setMaxIterations] = useState(0);
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -323,6 +326,9 @@ export default function Home() {
     const myProjId = projectId;
     setGenLoading(true);
     setActiveAgents(agent === "all" ? new Set(AGENTS) : new Set([agent]));
+    setCriticStatus(null);
+    setCurrentIteration(0);
+    setMaxIterations(0);
 
     try {
       const res = await fetch(`${API_URL}/generate`, {
@@ -378,6 +384,32 @@ export default function Home() {
                   next.delete(data.agent);
                   return next;
                 });
+              }
+            } else if (data.type === "iteration") {
+              if (projectIdRef.current === currentProjId) {
+                setCurrentIteration(data.iteration);
+                setMaxIterations(data.max_iterations);
+                if (data.revising) {
+                  setCriticStatus(`Revising: ${data.revising.join(", ")}`);
+                  setActiveAgents(new Set(data.revising));
+                }
+              }
+            } else if (data.type === "critic_start") {
+              if (projectIdRef.current === currentProjId) {
+                setCriticStatus("Critic is reviewing all documents...");
+                setActiveAgents(new Set());
+              }
+            } else if (data.type === "critic_result") {
+              if (projectIdRef.current === currentProjId) {
+                setCriticStatus("Critic review complete");
+              }
+            } else if (data.type === "critic_approved") {
+              if (projectIdRef.current === currentProjId) {
+                setCriticStatus("All documents approved by critic!");
+              }
+            } else if (data.type === "critic_max_iterations") {
+              if (projectIdRef.current === currentProjId) {
+                setCriticStatus("Max review iterations reached");
               }
             } else if (data.type === "error") {
             } else if (data.type === "done") {
@@ -763,6 +795,20 @@ export default function Home() {
               )}
             </button>
 
+            {/* Critic status */}
+            {criticStatus && (
+              <div className={s.criticStatus}>
+                <div className={s.criticLabel}>
+                  {currentIteration > 0 && maxIterations > 0 && (
+                    <span className={s.iterBadge}>
+                      Pass {currentIteration}/{maxIterations}
+                    </span>
+                  )}
+                  <span>🔍 Critic</span>
+                </div>
+                <p className={s.criticMsg}>{criticStatus}</p>
+              </div>
+            )}
 
             {/* Agents list */}
             <div>
