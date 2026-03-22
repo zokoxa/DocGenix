@@ -34,7 +34,8 @@ async def run_chat(project_id: int, message: str) -> AsyncGenerator[dict, None]:
     history = await get_chat_history(project_id, limit=20)
     idea = await get_project_idea(project_id) or "No idea provided."
 
-    messages = build_chat_messages(idea, docs, history)
+    context = await get_project_context(project_id)
+    messages = build_chat_messages(idea, docs, history, context)
     llm = make_chat_llm()
 
     # Stream the chat response

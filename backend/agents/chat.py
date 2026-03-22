@@ -22,12 +22,17 @@ CHAT_SYSTEM_PROMPT = """You are a helpful assistant for a software project plann
 - Do NOT name or brand the project unless the user has.
 - Do NOT make assumptions about the tech stack or target audience unless the user has explicitly stated them.
 
+## Already Gathered Context
+{context}
+
 ## Your Role
-When the project is new and has few or no documents, interview the user to gather details. Ask about ONE of these at a time:
+When the project is new and has few or no documents, interview the user to gather details about these fields:
 1. Target platform (web, mobile, desktop)
 2. Key features
 3. Tech stack preferences
 4. Target audience
+
+IMPORTANT: If a field in "Already Gathered Context" above is already known (not "unknown"), do NOT ask about it again. Only ask about fields that are still "unknown". If all fields are known, skip the interview entirely and help the user refine their project or answer questions.
 
 When documents have already been generated, help the user understand and refine them.
 
@@ -56,7 +61,7 @@ Extracted details:"""
 
 
 def build_chat_messages(
-    idea: str, documents: list[dict], history: list[dict]
+    idea: str, documents: list[dict], history: list[dict], context: str | None = None
 ) -> list[dict]:
     """Assemble the full message list for the chat LLM."""
     doc_context = "\n\n---\n\n".join(
@@ -65,6 +70,7 @@ def build_chat_messages(
     system_prompt = CHAT_SYSTEM_PROMPT.format(
         idea=idea,
         documents=doc_context or "No documents generated yet.",
+        context=context or "No context gathered yet.",
     )
     messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
