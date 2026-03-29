@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import s from "./landing.module.css";
 
-const API_URL = "http://localhost:1000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:1000";
 
 interface Project {
   id: number;

@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from routes.chat import router as chat_router
@@ -23,9 +24,12 @@ app.include_router(chat_router)
 app.include_router(generation_router)
 app.include_router(projects_router)
 
+_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+_origins = [o.strip() for o in _raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

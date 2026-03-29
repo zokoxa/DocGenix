@@ -7,31 +7,15 @@ services:
       - ./backend/.env
     ports:
       - "1000:1000"
-    command: uvicorn main:app --host 0.0.0.0 --port 1000 --reload
-    develop:
-      watch:
-        - action: sync
-          path: ./backend
-          target: /backend
-        - action: rebuild
-          path: ./backend/requirements.txt
+    command: uvicorn main:app --host 0.0.0.0 --port 1000
 
   frontend:
     build:
       context: ./frontend
       dockerfile: frontend.dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:1000}
     ports:
       - "3000:3000"
-    environment:
-      - WATCHPACK_POLLING=true
     depends_on:
       - backend
-    develop:
-      watch:
-        - action: sync
-          path: ./frontend
-          target: /app
-          ignore:
-            - node_modules/
-        - action: rebuild
-          path: ./frontend/package.json

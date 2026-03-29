@@ -18,7 +18,7 @@ import {
 import JSZip from "jszip";
 import s from "./page.module.css";
 
-const API_URL = "http://localhost:1000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:1000";
 
 // Agents that produce a visual diagram (nodes/edges)
 const DIAGRAM_AGENTS = ["System Architecture", "Data Model"];
