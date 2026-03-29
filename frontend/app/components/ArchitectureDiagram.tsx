@@ -165,6 +165,33 @@ function buildGraphData(rawNodes: ArchNode[], rawEdges: ArchEdge[]) {
     (n as any).__slot = layerOffsets[n.layer]++;
   }
 
+  const links = rawEdges
+    .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target)
+    .map((e) => ({ source: e.source, target: e.target, label: e.label }));
+
+  // Post-process: connect isolated nodes (no edges) to the most-connected node
+  const degree = new Map<string, number>();
+  for (const n of nodes) degree.set(n.id, 0);
+  for (const l of links) {
+    degree.set(l.source, (degree.get(l.source) ?? 0) + 1);
+    degree.set(l.target, (degree.get(l.target) ?? 0) + 1);
+  }
+  const hub = [...degree.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (hub) {
+    for (const n of nodes) {
+      if ((degree.get(n.id) ?? 0) === 0 && n.id !== hub) {
+        // Consumers (frontend) point TO hub; databases/external receive FROM hub
+        const isConsumer = n.node_type === "frontend";
+        const isLeaf     = n.node_type === "database" || n.node_type === "external";
+        links.push(
+          isConsumer ? { source: n.id, target: hub, label: "" }
+          : isLeaf   ? { source: hub,  target: n.id, label: "" }
+                     : { source: n.id, target: hub, label: "" }
+        );
+      }
+    }
+  }
+
   return {
     nodes: nodes.map((n) => ({
       ...n,
@@ -172,9 +199,7 @@ function buildGraphData(rawNodes: ArchNode[], rawEdges: ArchEdge[]) {
       y: ((n as any).__slot - (layerCounts[n.layer] - 1) / 2) * 70,
       z: 0,
     })),
-    links: rawEdges
-      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target)
-      .map((e) => ({ source: e.source, target: e.target, label: e.label })),
+    links,
   };
 }
 

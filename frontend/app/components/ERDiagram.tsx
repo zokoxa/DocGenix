@@ -246,24 +246,81 @@ export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: ER
       return true;
     });
 
-    const nodeIds  = new Set(uniqueNodes.map((n) => n.id));
-    const rfNodes  = computeLayout(uniqueNodes, rawEdges);
+    const nodeIds = new Set(uniqueNodes.map((n) => n.id));
 
-    const rfEdges: Edge[] = rawEdges
-      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target)
-      .map((e) => ({
+    // Filter valid edges first
+    const validRawEdges = rawEdges.filter(
+      (e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target
+    );
+
+    // Post-process: detect isolated nodes and connect them to the most-connected node
+    const degree = new Map<string, number>();
+    for (const n of uniqueNodes) degree.set(n.id, 0);
+    for (const e of validRawEdges) {
+      degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+      degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+    }
+    const hub = [...degree.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const syntheticIds = new Set<string>();
+    const syntheticRawEdges: EREdgeData[] = [];
+    if (hub) {
+      for (const [id, deg] of degree) {
+        if (deg === 0 && id !== hub) {
+          const synId = `syn-${id}`;
+          syntheticIds.add(synId);
+          syntheticRawEdges.push({ id: synId, source: id, target: hub, label: "", source_label: "", target_label: "" });
+        }
+      }
+    }
+    const allRawEdges = [...validRawEdges, ...syntheticRawEdges];
+
+    const rfNodes = computeLayout(uniqueNodes, allRawEdges);
+
+    // Count parallel edges (same unordered pair) to assign curvature offsets
+    const pairCount = new Map<string, number>();
+    for (const e of allRawEdges) {
+      const key = [e.source, e.target].sort().join("§");
+      pairCount.set(key, (pairCount.get(key) ?? 0) + 1);
+    }
+    const pairSeen = new Map<string, number>();
+
+    const rfEdges: Edge[] = allRawEdges.map((e) => {
+      const key = [e.source, e.target].sort().join("§");
+      const total = pairCount.get(key) ?? 1;
+      const idx = pairSeen.get(key) ?? 0;
+      pairSeen.set(key, idx + 1);
+
+      const isSynthetic = syntheticIds.has(e.id);
+
+      // For parallel edges, switch to bezier with spread curvatures so they don't overlap
+      let edgeType = "smoothstep";
+      let pathOptions: Record<string, unknown> | undefined;
+      if (total > 1) {
+        edgeType = "default"; // bezier supports curvature
+        const curvature = total === 1 ? 0 : -0.4 + (idx / Math.max(total - 1, 1)) * 0.8;
+        pathOptions = { curvature };
+      }
+
+      return {
         id: e.id,
         source: e.source,
         target: e.target,
-        type: "smoothstep",
+        type: edgeType,
         label: e.label || "",
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b", width: 14, height: 14 },
-        style: { stroke: "#f59e0b", strokeWidth: 1.2, opacity: 0.6 },
+        pathOptions,
+        markerEnd: { type: MarkerType.ArrowClosed, color: isSynthetic ? "#6b7280" : "#f59e0b", width: 14, height: 14 },
+        style: {
+          stroke: isSynthetic ? "#6b7280" : "#f59e0b",
+          strokeWidth: 1.2,
+          opacity: isSynthetic ? 0.3 : 0.6,
+          strokeDasharray: isSynthetic ? "5 5" : undefined,
+        },
         labelStyle: { fill: "#fbbf24", fontSize: 10, fontWeight: 700 },
         labelBgStyle: { fill: "#0f172a", fillOpacity: 0.92 },
         labelBgPadding: [4, 3] as [number, number],
         labelBgBorderRadius: 3,
-      }));
+      };
+    });
 
     const [nodes, , onNodesChange] = useNodesState(rfNodes);
     const [edges, , onEdgesChange] = useEdgesState(rfEdges);
