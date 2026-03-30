@@ -42,9 +42,6 @@ export default function RootLayout({
             font-size: 1.1rem;
             line-height: 1.6;
           }
-          @media (max-width: 1279px) {
-            #small-screen-guard { display: flex; }
-          }
         `}</style>
       </body>
     </html>
